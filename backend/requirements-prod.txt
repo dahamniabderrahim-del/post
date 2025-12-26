@@ -1,0 +1,18 @@
+# Requirements pour la production
+# Installez avec: pip install -r requirements-prod.txt
+# Ce fichier inclut toutes les dépendances nécessaires pour la production
+
+# Framework web
+Flask==3.0.0
+flask-cors==4.0.0
+
+# Base de données PostgreSQL
+# IMPORTANT: Utilisez psycopg2-binary (pas psycopg2) pour éviter les problèmes de compilation
+psycopg2-binary==2.9.9
+
+# Serveur WSGI pour production
+gunicorn==21.2.0
+
+# Variables d'environnement (optionnel, pour .env)
+python-dotenv==1.0.0
+

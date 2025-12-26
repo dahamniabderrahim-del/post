@@ -1,0 +1,11 @@
+# Requirements pour Render.com
+# Version alternative si requirements-prod.txt ne fonctionne pas
+# IMPORTANT: Utilisez psycopg2-binary (pas psycopg2) pour éviter les problèmes de compilation
+
+Flask==3.0.0
+flask-cors==4.0.0
+# psycopg2-binary est précompilé avec toutes les dépendances nécessaires
+psycopg2-binary==2.9.9
+gunicorn==21.2.0
+python-dotenv==1.0.0
+
