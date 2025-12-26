@@ -14,6 +14,9 @@ import axios from 'axios'
 import FeaturePopup from './FeaturePopup'
 import MeasureTool from './MeasureTool'
 
+// URL de l'API depuis les variables d'environnement
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+
 const Map = forwardRef(({ selectedLayers, layerColors = {} }, ref) => {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
@@ -121,7 +124,7 @@ const Map = forwardRef(({ selectedLayers, layerColors = {} }, ref) => {
         })
       } else {
         // Fallback: utiliser bounds
-        axios.get(`http://localhost:5000/api/layers/${layerName}/bounds`)
+        axios.get(`${API_URL}/api/layers/${layerName}/bounds`)
           .then(boundsResponse => {
             const bounds = boundsResponse.data
             if (bounds?.minx && bounds?.miny && bounds?.maxx && bounds?.maxy) {
@@ -308,7 +311,7 @@ const Map = forwardRef(({ selectedLayers, layerColors = {} }, ref) => {
         // Charger les données GeoJSON avec une approche simplifiée
         const loadLayerData = async () => {
           try {
-            const response = await axios.get(`http://localhost:5000/api/layers/${layerName}/geojson`)
+            const response = await axios.get(`${API_URL}/api/layers/${layerName}/geojson`)
             const geojsonData = response.data
             
             console.log(`[${layerName}] Données reçues, features:`, geojsonData?.features?.length || 0)

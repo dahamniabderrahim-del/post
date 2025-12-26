@@ -11,7 +11,8 @@ function App() {
 
   useEffect(() => {
     // Charger la liste des couches disponibles
-    fetch('http://localhost:5000/api/layers')
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+    fetch(`${apiUrl}/api/layers`)
       .then(res => {
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`)
