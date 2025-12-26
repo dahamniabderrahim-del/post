@@ -39,6 +39,7 @@ Pour documenter la variable nécessaire.
    - Sélectionner le repository : `dahamniabderrahim-del/post`
 
 3. **Configuration du déploiement**
+   - **Site name** : `sig-frontend` (ou laissez Netlify en générer un)
    - **Base directory** : `frontend`
    - **Build command** : `npm install && npm run build`
    - **Publish directory** : `frontend/dist`
@@ -86,10 +87,10 @@ Le fichier `frontend/netlify.toml` est déjà configuré :
 
 Après le déploiement, vous obtiendrez une URL comme :
 ```
-https://votre-site.netlify.app
+https://sig-frontend.netlify.app
 ```
 
-Netlify peut aussi générer un nom personnalisé ou vous pouvez utiliser un domaine personnalisé.
+Si le nom `sig-frontend` est déjà pris, Netlify ajoutera un suffixe (ex: `sig-frontend-123456`). Vous pouvez aussi utiliser un domaine personnalisé.
 
 ---
 
@@ -119,7 +120,10 @@ Netlify peut aussi générer un nom personnalisé ou vous pouvez utiliser un dom
    - **Output Directory** : `dist`
    - **Install Command** : `npm install`
 
-4. **Variables d'environnement**
+4. **Configuration du site**
+   - **Site name** : `sig-frontend` (si disponible, sinon Vercel générera un nom)
+   
+5. **Variables d'environnement**
    - Settings → Environment Variables
    - Ajoutez :
      - **Key** : `VITE_API_URL`
@@ -164,6 +168,8 @@ Créez `frontend/vercel.json` (optionnel) :
    - **Root Directory** : `frontend`
    - **Build Command** : `npm install && npm run build`
    - **Publish Directory** : `dist`
+   
+   Votre site sera accessible à : `https://sig-frontend.onrender.com`
 
 4. **Variables d'environnement**
    - Environment Variables
@@ -185,8 +191,9 @@ Dans Render → Backend → Settings → Environment Variables :
 
 Ajoutez ou modifiez :
 - **Key** : `ALLOWED_ORIGINS`
-- **Value** : `https://votre-frontend.netlify.app,https://votre-frontend.vercel.app`
+- **Value** : `https://sig-frontend.netlify.app,https://sig-frontend.vercel.app,https://sig-frontend.onrender.com`
   - (Séparez plusieurs URLs par des virgules)
+  - ⚠️ Remplacez par les URLs réelles de votre frontend déployé
 
 ---
 
@@ -216,9 +223,13 @@ Ajoutez ou modifiez :
 
 ### Variables d'environnement Backend
 
-- `ALLOWED_ORIGINS` = `https://votre-frontend.netlify.app`
+- `ALLOWED_ORIGINS` = `https://sig-frontend.netlify.app` (ou votre URL réelle)
   - ⚠️ URL complète du frontend
   - Séparez plusieurs URLs par des virgules si nécessaire
+  - Exemples :
+    - Netlify : `https://sig-frontend.netlify.app`
+    - Vercel : `https://sig-frontend.vercel.app`
+    - Render : `https://sig-frontend.onrender.com`
 
 ---
 
