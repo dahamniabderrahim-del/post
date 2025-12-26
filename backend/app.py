@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import psycopg
+from psycopg.rows import dict_row
 import json
 import os
 from urllib.parse import urlparse
@@ -53,7 +53,7 @@ DB_CONFIG = get_db_config()
 def get_db_connection():
     """Établit une connexion à la base de données PostgreSQL"""
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn = psycopg.connect(**DB_CONFIG)
         return conn
     except Exception as e:
         print(f"Erreur de connexion à la base de données: {e}")
@@ -67,7 +67,7 @@ def get_layers():
         return jsonify({'error': 'Impossible de se connecter à la base de données'}), 500
     
     try:
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor = conn.cursor(row_factory=dict_row)
         # Récupère toutes les tables avec des colonnes géométriques
         query = """
         SELECT 
