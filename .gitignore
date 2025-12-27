@@ -39,3 +39,12 @@ Thumbs.db
 backend/.env
 frontend/.env
 
+# Project copies
+site_webing/
+
+# Build outputs
+frontend/dist/
+backend/dist/
+
+# Logs
+*.log

@@ -1,165 +1,200 @@
 import React, { useState, useEffect } from 'react'
+import axios from 'axios'
 import './FilterPanel.css'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
-
-function FilterPanel({ selectedLayers, onFilterApply, onFilterClear }) {
+function FilterPanel({ layers, selectedLayers, onFilterChange }) {
   const [isOpen, setIsOpen] = useState(false)
   const [selectedLayer, setSelectedLayer] = useState('')
   const [columns, setColumns] = useState([])
   const [selectedColumn, setSelectedColumn] = useState('')
-  const [operator, setOperator] = useState('=')
-  const [value, setValue] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [filterValue, setFilterValue] = useState('')
+  const [filterOperator, setFilterOperator] = useState('=')
+  const [loadingColumns, setLoadingColumns] = useState(false)
 
   // Charger les colonnes quand une couche est sélectionnée
   useEffect(() => {
-    if (selectedLayer) {
-      setLoading(true)
-      fetch(`${API_URL}/api/layers/${selectedLayer}/columns`)
-        .then(res => {
-          if (!res.ok) {
-            throw new Error(`HTTP error! status: ${res.status}`)
-          }
-          return res.json()
-        })
-        .then(data => {
-          if (Array.isArray(data)) {
-            setColumns(data)
-          } else {
-            setColumns([])
-          }
-        })
-        .catch(err => {
-          console.error('Erreur lors du chargement des colonnes:', err)
-          setColumns([])
-        })
-        .finally(() => {
-          setLoading(false)
-        })
+    if (selectedLayer && selectedLayers.includes(selectedLayer)) {
+      loadColumns(selectedLayer)
     } else {
       setColumns([])
       setSelectedColumn('')
     }
-  }, [selectedLayer])
+  }, [selectedLayer, selectedLayers])
 
-  const handleApply = () => {
-    if (selectedLayer && selectedColumn && value !== '') {
-      onFilterApply({
-        layer: selectedLayer,
-        column: selectedColumn,
-        operator: operator,
-        value: value
-      })
+  const loadColumns = async (layerName) => {
+    setLoadingColumns(true)
+    try {
+      // Récupérer un exemple de feature pour obtenir les colonnes
+      const response = await axios.get(`http://localhost:5000/api/layers/${layerName}/geojson?limit=1`)
+      const geojsonData = response.data
+      
+      if (geojsonData?.features && geojsonData.features.length > 0) {
+        const firstFeature = geojsonData.features[0]
+        const properties = firstFeature.properties || {}
+        
+        // Extraire les noms des colonnes (propriétés)
+        const columnNames = Object.keys(properties).filter(key => 
+          key !== 'geometry' && !key.startsWith('_')
+        )
+        
+        setColumns(columnNames)
+      } else {
+        setColumns([])
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des colonnes:', error)
+      setColumns([])
+    } finally {
+      setLoadingColumns(false)
     }
   }
 
-  const handleClear = () => {
+  const handleApplyFilter = () => {
+    if (!selectedLayer || !selectedColumn || !filterValue.trim()) {
+      return
+    }
+
+    const filter = {
+      layer: selectedLayer,
+      column: selectedColumn,
+      operator: filterOperator,
+      value: filterValue.trim()
+    }
+
+    onFilterChange(filter)
+  }
+
+  const handleClearFilter = () => {
     setSelectedLayer('')
     setSelectedColumn('')
-    setOperator('=')
-    setValue('')
-    onFilterClear()
+    setFilterValue('')
+    setFilterOperator('=')
+    setColumns([])
+    onFilterChange(null)
   }
+
+  const availableLayers = layers.filter(layer => selectedLayers.includes(layer.name))
 
   return (
     <div className="filter-panel">
-      <button 
-        className="filter-toggle"
+      <button
+        className={`filter-toggle ${isOpen ? 'active' : ''}`}
         onClick={() => setIsOpen(!isOpen)}
-        title="Ouvrir/Fermer le panneau de filtrage"
+        title="Filtrer les entités"
       >
-        🔍 Filtre
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+        </svg>
+        <span>Filtre</span>
       </button>
-      
+
       {isOpen && (
         <div className="filter-content">
-          <h3 className="filter-title">Filtrer les entités</h3>
-          
-          <div className="filter-field">
-            <label>Couche :</label>
-            <select 
-              value={selectedLayer}
-              onChange={(e) => setSelectedLayer(e.target.value)}
-              className="filter-select"
-            >
-              <option value="">Sélectionner une couche</option>
-              {selectedLayers.map(layer => (
-                <option key={layer} value={layer}>{layer}</option>
-              ))}
-            </select>
+          <div className="filter-header">
+            <h3>Filtrer les entités</h3>
+            <button className="filter-close" onClick={() => setIsOpen(false)}>×</button>
           </div>
-          
-          {selectedLayer && (
-            <>
-              <div className="filter-field">
-                <label>Colonne :</label>
-                {loading ? (
-                  <div className="loading">Chargement...</div>
+
+          <div className="filter-body">
+            <div className="filter-group">
+              <label>Couche</label>
+              <select
+                value={selectedLayer}
+                onChange={(e) => {
+                  setSelectedLayer(e.target.value)
+                  setSelectedColumn('')
+                  setFilterValue('')
+                }}
+                className="filter-select"
+              >
+                <option value="">Sélectionner une couche</option>
+                {availableLayers.map(layer => (
+                  <option key={layer.name} value={layer.name}>
+                    {layer.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedLayer && (
+              <div className="filter-group">
+                <label>Colonne</label>
+                {loadingColumns ? (
+                  <div className="loading-columns">Chargement...</div>
                 ) : (
-                  <select 
+                  <select
                     value={selectedColumn}
-                    onChange={(e) => setSelectedColumn(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedColumn(e.target.value)
+                      setFilterValue('')
+                    }}
                     className="filter-select"
                   >
                     <option value="">Sélectionner une colonne</option>
-                    {columns.map(col => (
-                      <option key={col} value={col}>{col}</option>
+                    {columns.map(column => (
+                      <option key={column} value={column}>
+                        {column}
+                      </option>
                     ))}
                   </select>
                 )}
               </div>
-              
-              {selectedColumn && (
-                <>
-                  <div className="filter-field">
-                    <label>Opérateur :</label>
-                    <select 
-                      value={operator}
-                      onChange={(e) => setOperator(e.target.value)}
-                      className="filter-select"
-                    >
-                      <option value="=">= (Égal à)</option>
-                      <option value="!=">≠ (Différent de)</option>
-                      <option value=">">&gt; (Supérieur à)</option>
-                      <option value="<">&lt; (Inférieur à)</option>
-                      <option value=">=">≥ (Supérieur ou égal)</option>
-                      <option value="<=">≤ (Inférieur ou égal)</option>
-                      <option value="LIKE">Contient</option>
-                      <option value="NOT LIKE">Ne contient pas</option>
-                    </select>
-                  </div>
-                  
-                  <div className="filter-field">
-                    <label>Valeur :</label>
-                    <input
-                      type="text"
-                      value={value}
-                      onChange={(e) => setValue(e.target.value)}
-                      placeholder="Entrez la valeur"
-                      className="filter-input"
-                    />
-                  </div>
-                  
-                  <div className="filter-actions">
-                    <button 
-                      onClick={handleApply}
-                      className="filter-button apply"
-                      disabled={!selectedLayer || !selectedColumn || value === ''}
-                    >
-                      Appliquer
-                    </button>
-                    <button 
-                      onClick={handleClear}
-                      className="filter-button clear"
-                    >
-                      Effacer
-                    </button>
-                  </div>
-                </>
-              )}
-            </>
-          )}
+            )}
+
+            {selectedColumn && (
+              <>
+                <div className="filter-group">
+                  <label>Opérateur</label>
+                  <select
+                    value={filterOperator}
+                    onChange={(e) => setFilterOperator(e.target.value)}
+                    className="filter-select"
+                  >
+                    <option value="=">= (Égal)</option>
+                    <option value="!=">≠ (Différent)</option>
+                    <option value=">">&gt; (Supérieur)</option>
+                    <option value="<">&lt; (Inférieur)</option>
+                    <option value=">=">≥ (Supérieur ou égal)</option>
+                    <option value="<=">≤ (Inférieur ou égal)</option>
+                    <option value="LIKE">Contient</option>
+                    <option value="NOT LIKE">Ne contient pas</option>
+                  </select>
+                </div>
+
+                <div className="filter-group">
+                  <label>Valeur</label>
+                  <input
+                    type="text"
+                    value={filterValue}
+                    onChange={(e) => setFilterValue(e.target.value)}
+                    placeholder="Entrer la valeur..."
+                    className="filter-input"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleApplyFilter()
+                      }
+                    }}
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="filter-actions">
+              <button
+                className="filter-button apply"
+                onClick={handleApplyFilter}
+                disabled={!selectedLayer || !selectedColumn || !filterValue.trim()}
+              >
+                Appliquer
+              </button>
+              <button
+                className="filter-button clear"
+                onClick={handleClearFilter}
+              >
+                Effacer
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -167,4 +202,3 @@ function FilterPanel({ selectedLayers, onFilterApply, onFilterClear }) {
 }
 
 export default FilterPanel
-

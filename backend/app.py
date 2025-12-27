@@ -1,59 +1,25 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import psycopg
-from psycopg.rows import dict_row
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import json
-import os
-from urllib.parse import urlparse
 
 app = Flask(__name__)
-
-# Configuration CORS pour la production
-# Autoriser les domaines spécifiés ou tous en développement
-allowed_origins = os.getenv('ALLOWED_ORIGINS', '*').split(',')
-if '*' in allowed_origins:
-    CORS(app)  # Autoriser tous les origines en développement
-else:
-    CORS(app, resources={
-        r"/api/*": {
-            "origins": allowed_origins,
-            "methods": ["GET", "POST", "OPTIONS"],
-            "allow_headers": ["Content-Type"]
-        }
-    })
+CORS(app)
 
 # Configuration de la base de données PostgreSQL
-# Supporte DATABASE_URL (format URL) ou variables individuelles
-def get_db_config():
-    """Récupère la configuration de la base de données depuis les variables d'environnement"""
-    database_url = os.getenv('DATABASE_URL')
-    
-    if database_url:
-        # Format: postgresql://user:password@host:port/database
-        result = urlparse(database_url)
-        return {
-            'host': result.hostname,
-            'port': result.port or 5432,
-            'dbname': result.path[1:],  # psycopg utilise 'dbname' au lieu de 'database'
-            'user': result.username,
-            'password': result.password
-        }
-    else:
-        # Utiliser des variables individuelles ou valeurs par défaut pour développement
-        return {
-            'host': os.getenv('DB_HOST', 'localhost'),
-            'port': int(os.getenv('DB_PORT', 5432)),
-            'dbname': os.getenv('DB_NAME', 'pos'),  # psycopg utilise 'dbname'
-            'user': os.getenv('DB_USER', 'postgres'),
-            'password': os.getenv('DB_PASSWORD', 'Admin123')
-        }
-
-DB_CONFIG = get_db_config()
+DB_CONFIG = {
+    'host': 'localhost',
+    'port': 5432,
+    'database': 'pos',
+    'user': 'postgres',
+    'password': 'Admin123'
+}
 
 def get_db_connection():
     """Établit une connexion à la base de données PostgreSQL"""
     try:
-        conn = psycopg.connect(**DB_CONFIG)
+        conn = psycopg2.connect(**DB_CONFIG)
         return conn
     except Exception as e:
         print(f"Erreur de connexion à la base de données: {e}")
@@ -67,7 +33,7 @@ def get_layers():
         return jsonify({'error': 'Impossible de se connecter à la base de données'}), 500
     
     try:
-        cursor = conn.cursor(row_factory=dict_row)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         # Récupère toutes les tables avec des colonnes géométriques
         query = """
         SELECT 
@@ -98,68 +64,6 @@ def get_layers():
     finally:
         conn.close()
 
-@app.route('/api/layers/<layer_name>/columns', methods=['GET'])
-def get_layer_columns(layer_name):
-    """Récupère la liste des colonnes d'une couche"""
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Impossible de se connecter à la base de données'}), 500
-    
-    try:
-        cursor = conn.cursor(row_factory=dict_row)
-        
-        # Vérifier que la table existe
-        check_table_query = """
-        SELECT EXISTS (
-            SELECT FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_name = %s
-        );
-        """
-        cursor.execute(check_table_query, (layer_name,))
-        table_exists = cursor.fetchone()['exists']
-        
-        if not table_exists:
-            return jsonify({'error': f'Table "{layer_name}" n\'existe pas'}), 404
-        
-        # Trouver la colonne géométrique
-        find_geom_query = """
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_schema = 'public'
-        AND table_name = %s 
-        AND (data_type LIKE '%geometry%' OR udt_name = 'geometry')
-        LIMIT 1;
-        """
-        cursor.execute(find_geom_query, (layer_name,))
-        geom_result = cursor.fetchone()
-        
-        if not geom_result:
-            return jsonify({'error': 'Aucune colonne géométrique trouvée'}), 404
-        
-        geom_column = geom_result['column_name']
-        
-        # Récupérer toutes les colonnes non-géométriques
-        columns_query = """
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_schema = 'public'
-        AND table_name = %s 
-        AND column_name != %s
-        AND data_type NOT LIKE '%geometry%'
-        AND udt_name != 'geometry'
-        ORDER BY column_name;
-        """
-        cursor.execute(columns_query, (layer_name, geom_column))
-        columns = [row['column_name'] for row in cursor.fetchall()]
-        
-        return jsonify(columns)
-    except Exception as e:
-        print(f"❌ Erreur dans get_layer_columns pour {layer_name}: {e}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        conn.close()
-
 @app.route('/api/layers/<layer_name>/geojson', methods=['GET'])
 def get_layer_geojson(layer_name):
     """Récupère les données d'une couche au format GeoJSON"""
@@ -169,11 +73,6 @@ def get_layer_geojson(layer_name):
     
     try:
         cursor = conn.cursor()
-        
-        # Récupérer les paramètres de filtre
-        filter_column = request.args.get('column')
-        filter_operator = request.args.get('operator')
-        filter_value = request.args.get('value')
         
         # Vérifier d'abord que la table existe
         check_table_query = f"""
@@ -250,6 +149,28 @@ def get_layer_geojson(layer_name):
             print(f"⚠ Erreur lors de la récupération des colonnes: {e}")
             other_columns = []
         
+        # Récupérer les paramètres de filtre
+        filter_column = request.args.get('column')
+        filter_operator = request.args.get('operator', '=')
+        filter_value = request.args.get('value')
+        
+        # Construire la clause WHERE pour le filtre (avec protection SQL injection)
+        filter_where = ""
+        if filter_column and filter_value and filter_column in other_columns:
+            # Échapper les apostrophes pour éviter SQL injection
+            escaped_value = filter_value.replace("'", "''")
+            if filter_operator.upper() == 'LIKE':
+                filter_where = f' AND "{filter_column}"::text LIKE \'%{escaped_value}%\''
+            elif filter_operator.upper() == 'NOT LIKE':
+                filter_where = f' AND "{filter_column}"::text NOT LIKE \'%{escaped_value}%\''
+            elif filter_operator == '!=':
+                filter_where = f' AND "{filter_column}"::text != \'{escaped_value}\''
+            elif filter_operator in ['>', '<', '>=', '<=']:
+                filter_where = f' AND "{filter_column}" {filter_operator} \'{escaped_value}\''
+            else:  # =
+                filter_where = f' AND "{filter_column}"::text = \'{escaped_value}\''
+            print(f"🔍 Filtre appliqué: {filter_column} {filter_operator} {filter_value}")
+        
         # Construit la requête GeoJSON de manière plus simple et robuste
         # Utilise ST_Transform pour convertir en 4326 si nécessaire
         if geom_srid != 4326:
@@ -270,13 +191,15 @@ def get_layer_geojson(layer_name):
             properties_expr = "'{}'::json"
         
         # Vérifier d'abord qu'il y a des données
-        count_query = f'SELECT COUNT(*) FROM "{layer_name}" WHERE {geom_column} IS NOT NULL;'
+        count_query = f'SELECT COUNT(*) FROM "{layer_name}" WHERE {geom_column} IS NOT NULL{filter_where};'
         cursor.execute(count_query)
         row_count = cursor.fetchone()[0]
         print(f"📊 Table {layer_name}: {row_count} lignes avec géométrie (SRID: {geom_srid})")
+        if filter_where:
+            print(f"🔍 Filtre appliqué: {filter_column} {filter_operator} {filter_value}")
         
         if row_count == 0:
-            print(f"⚠ Table {layer_name} est vide")
+            print(f"⚠ Table {layer_name} est vide ou aucun résultat avec le filtre")
             return jsonify({'type': 'FeatureCollection', 'features': []})
         
         # Requête SQL simplifiée - approche directe
@@ -295,7 +218,7 @@ def get_layer_geojson(layer_name):
             )
         ) as geojson
         FROM "{layer_name}"
-        WHERE {geom_column} IS NOT NULL
+        WHERE {geom_column} IS NOT NULL{filter_where}
         LIMIT 10000;
         """
         
@@ -389,11 +312,7 @@ def health_check():
     conn = get_db_connection()
     if conn:
         conn.close()
-        return jsonify({
-            'status': 'healthy', 
-            'database': 'connected',
-            'environment': os.getenv('FLASK_ENV', 'development')
-        })
+        return jsonify({'status': 'healthy', 'database': 'connected'})
     else:
         return jsonify({'status': 'unhealthy', 'database': 'disconnected'}), 500
 
@@ -449,8 +368,4 @@ def test_layer(layer_name):
         conn.close()
 
 if __name__ == '__main__':
-    # En production, utilisez Gunicorn au lieu de app.run()
-    port = int(os.getenv('PORT', 5000))
-    debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
-    app.run(debug=debug, port=port, host='0.0.0.0')
-
+    app.run(debug=True, port=5000, host='0.0.0.0')

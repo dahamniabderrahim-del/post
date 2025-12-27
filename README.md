@@ -4,11 +4,15 @@ Application web moderne pour visualiser des couches géospatiales depuis une bas
 
 ## 🚀 Fonctionnalités
 
-- Visualisation de couches géospatiales depuis PostgreSQL
-- Fond de carte OpenStreetMap (OSM)
-- Interface moderne et responsive
-- Sélection multiple de couches
-- Affichage automatique des limites des couches
+- **Visualisation de couches géospatiales** depuis PostgreSQL
+- **Fond de carte** : Basculement entre OpenStreetMap (OSM) et imagerie satellite
+- **Interface moderne et responsive** avec palette de couleurs professionnelle
+- **Sélection multiple de couches** avec zoom automatique
+- **Filtrage avancé** : Filtrage des entités par colonnes et valeurs
+- **Outils de mesure** : Mesure de distance et de surface avec calculs géodésiques précis
+- **Palette de couleurs** : Personnalisation des couleurs des couches avec 80+ couleurs
+- **Popup d'information** : Affichage des propriétés des entités au clic
+- **Animation de filtrage** : Effet de clignotement pour les entités filtrées
 
 ## 📋 Prérequis
 
@@ -87,12 +91,31 @@ Assurez-vous que votre base de données PostgreSQL :
 - Les couches sont automatiquement détectées en recherchant les tables avec des colonnes géométriques
 - Le style des couches peut être personnalisé dans `frontend/src/components/Map.jsx`
 
+## 📤 Hébergement sur GitHub
+
+Le projet est déjà configuré pour GitHub. Pour pousser vos modifications :
+
+### Option 1 : Utiliser le script batch (Windows)
+Double-cliquez sur `push_github.bat` et suivez les instructions.
+
+### Option 2 : Commandes manuelles
+```powershell
+git add .
+git commit -m "Votre message de commit"
+git push origin main
+```
+
+📖 **Guide complet** : Consultez [HEBERGER_GITHUB.md](HEBERGER_GITHUB.md) pour les instructions détaillées.
+
+**Repository GitHub** : https://github.com/dahamniabderrahim-del/post
+
 ## 🚀 Déploiement en Production
 
 Pour déployer votre application en production, consultez les guides suivants :
 
 - **[Guide d'Hébergement Complet](GUIDE_HEBERGEMENT.md)** - Guide détaillé étape par étape pour différents types d'hébergement (VPS, Cloud, etc.)
 - **[Guide de Déploiement Rapide](DEPLOIEMENT_RAPIDE.md)** - Guide rapide pour déployer sur Render, Railway, Netlify
+- **[Guide GitHub](HEBERGER_GITHUB.md)** - Guide complet pour héberger sur GitHub
 
 ### Fichiers de configuration pour la production
 

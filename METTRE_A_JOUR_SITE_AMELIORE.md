@@ -247,3 +247,6 @@ git push
 Souhaitez-vous que je vous aide à vérifier les configurations avant de déployer ?
 
 
+
+
+

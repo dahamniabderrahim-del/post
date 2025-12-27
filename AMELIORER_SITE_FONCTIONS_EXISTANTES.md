@@ -417,3 +417,6 @@ Tous les exemples de code ci-dessus sont des suggestions. Adaptez-les selon vos 
 Souhaitez-vous que je vous aide à implémenter une de ces améliorations en particulier ?
 
 
+
+
+

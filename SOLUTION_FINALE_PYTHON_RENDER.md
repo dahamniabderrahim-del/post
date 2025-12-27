@@ -153,3 +153,6 @@ Utilisez l'**Option C** (psycopg) qui fonctionne avec Python 3.13. C'est la solu
 
 
 
+
+
+

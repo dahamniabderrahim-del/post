@@ -141,3 +141,6 @@ Voir `DEPANNAGE_ERREUR_PSYCOPG2.md` → Solution 2 pour les instructions complè
 
 
 
+
+
+

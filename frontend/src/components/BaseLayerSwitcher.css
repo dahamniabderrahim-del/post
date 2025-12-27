@@ -1,0 +1,60 @@
+.base-layer-switcher {
+  position: absolute;
+  top: 65px;
+  left: 0.5em;
+  z-index: 1000;
+  width: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-left: 0;
+}
+
+.base-layer-button {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  color: #475569;
+}
+
+.base-layer-button * {
+  color: inherit;
+}
+
+.base-layer-button:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.base-layer-button:active {
+  background: #e2e8f0;
+}
+
+.base-layer-button.active {
+  background: #0ea5e9;
+  border: 1px solid #0284c7;
+  color: white;
+}
+
+.base-layer-button.active:hover {
+  background: #0284c7;
+  border-color: #0369a1;
+}
+
+.base-layer-button svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+

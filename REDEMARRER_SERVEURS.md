@@ -169,3 +169,6 @@ Pour éviter de redémarrer manuellement, vous pouvez utiliser des outils comme 
 
 **Une fois les serveurs redémarrés, rechargez la page dans votre navigateur (F5) pour voir les nouvelles fonctionnalités !**
 
+
+
+

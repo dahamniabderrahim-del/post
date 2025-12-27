@@ -225,3 +225,6 @@ Pour mieux diagnostiquer, pouvez-vous me dire :
 La cause la plus probable est que **PostGIS n'est pas activé** dans la base de données. Activez-le avec `CREATE EXTENSION postgis;` et testez à nouveau.
 
 
+
+
+

@@ -6,11 +6,16 @@ function LayerPanel({ layers, selectedLayers, onLayerToggle, onLayerZoom, layerC
   return (
     <div className="layer-panel">
       <div className="database-header">
-        <div className="database-icon">🗄️</div>
-        <div className="database-info">
-          <h2 className="database-name">{databaseName}</h2>
-          <span className="database-label">Base de données</span>
-        </div>
+        <button className="database-button">
+          <div className="database-icon-stack">
+            <span className="db-icon-layer layer-1"></span>
+            <span className="db-icon-layer layer-2"></span>
+          </div>
+          <div className="database-info">
+            <h2 className="database-name">{databaseName.toUpperCase()}</h2>
+            <span className="database-label">Base de données</span>
+          </div>
+        </button>
       </div>
       
       <div className="layers-section">
@@ -46,7 +51,10 @@ function LayerPanel({ layers, selectedLayers, onLayerToggle, onLayerZoom, layerC
                     onClick={() => onLayerZoom(layer.name)}
                     title="Zoomer sur cette couche"
                   >
-                    🔍
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <path d="m21 21-4.35-4.35"></path>
+                    </svg>
                   </button>
                 </div>
               </div>

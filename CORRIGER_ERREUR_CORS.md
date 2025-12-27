@@ -161,3 +161,6 @@ Si ce code est présent, il suffit d'ajouter `ALLOWED_ORIGINS` dans Render.
 C'est tout ! Une fois `ALLOWED_ORIGINS` configurée, l'erreur CORS devrait disparaître.
 
 
+
+
+

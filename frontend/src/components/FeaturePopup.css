@@ -61,7 +61,7 @@
    ============================================ */
 
 .popup-header {
-  background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
   color: white;
   padding: 0;
   display: flex;
@@ -280,7 +280,7 @@
 .label-icon {
   width: 12px;
   height: 12px;
-  color: #3b82f6;
+  color: #0ea5e9;
   flex-shrink: 0;
   display: flex;
   align-items: center;

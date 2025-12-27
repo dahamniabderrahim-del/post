@@ -357,3 +357,6 @@ import FilterPanel from './components/FilterPanel'
 
 Souhaitez-vous que je commence par implémenter une de ces fonctionnalités ?
 
+
+
+
