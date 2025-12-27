@@ -34,7 +34,7 @@ def get_db_config():
         return {
             'host': result.hostname,
             'port': result.port or 5432,
-            'database': result.path[1:],  # Enlever le '/' initial
+            'dbname': result.path[1:],  # psycopg utilise 'dbname' au lieu de 'database'
             'user': result.username,
             'password': result.password
         }
@@ -43,7 +43,7 @@ def get_db_config():
         return {
             'host': os.getenv('DB_HOST', 'localhost'),
             'port': int(os.getenv('DB_PORT', 5432)),
-            'database': os.getenv('DB_NAME', 'pos'),
+            'dbname': os.getenv('DB_NAME', 'pos'),  # psycopg utilise 'dbname'
             'user': os.getenv('DB_USER', 'postgres'),
             'password': os.getenv('DB_PASSWORD', 'Admin123')
         }
