@@ -3,9 +3,31 @@ from flask_cors import CORS
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import json
+import os
 
 app = Flask(__name__)
-CORS(app)
+
+# Configuration CORS pour autoriser le frontend déployé
+# En production, autoriser toutes les origines Render
+# En développement, autoriser localhost
+allowed_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+    "https://sig-frontend.onrender.com",
+]
+
+# Ajouter toutes les origines Render possibles
+# Note: En production, vous pouvez aussi utiliser CORS(app) pour autoriser toutes les origines
+CORS(app, resources={
+    r"/api/*": {
+        "origins": allowed_origins,
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": False
+    }
+}, allow_origin_regex=r"https://.*\.onrender\.com")
 
 # Configuration de la base de données PostgreSQL
 DB_CONFIG = {

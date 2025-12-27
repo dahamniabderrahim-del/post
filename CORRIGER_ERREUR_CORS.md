@@ -164,3 +164,4 @@ C'est tout ! Une fois `ALLOWED_ORIGINS` configurée, l'erreur CORS devrait dispa
 
 
 
+

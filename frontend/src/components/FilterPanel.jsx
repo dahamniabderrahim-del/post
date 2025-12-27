@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import { API_URL } from '../config'
 import './FilterPanel.css'
 
 function FilterPanel({ layers, selectedLayers, onFilterChange }) {
@@ -25,7 +26,7 @@ function FilterPanel({ layers, selectedLayers, onFilterChange }) {
     setLoadingColumns(true)
     try {
       // Récupérer un exemple de feature pour obtenir les colonnes
-      const response = await axios.get(`http://localhost:5000/api/layers/${layerName}/geojson?limit=1`)
+      const response = await axios.get(`${API_URL}/api/layers/${layerName}/geojson?limit=1`)
       const geojsonData = response.data
       
       if (geojsonData?.features && geojsonData.features.length > 0) {

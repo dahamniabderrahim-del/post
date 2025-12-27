@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import Map from './components/Map'
 import LayerPanel from './components/LayerPanel'
+import { API_URL } from './config'
 import './App.css'
 
 function App() {
@@ -12,7 +13,7 @@ function App() {
 
   useEffect(() => {
     // Charger la liste des couches disponibles
-    fetch('http://localhost:5000/api/layers')
+    fetch(`${API_URL}/api/layers`)
       .then(res => {
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`)

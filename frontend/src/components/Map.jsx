@@ -11,6 +11,7 @@ import { click } from 'ol/events/condition'
 import { Select } from 'ol/interaction'
 import 'ol/ol.css'
 import axios from 'axios'
+import { API_URL } from '../config'
 import FeaturePopup from './FeaturePopup'
 import MeasureTool from './MeasureTool'
 import FilterPanel from './FilterPanel'
@@ -133,7 +134,7 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
         })
       } else {
         // Fallback: utiliser bounds
-        axios.get(`http://localhost:5000/api/layers/${layerName}/bounds`)
+        axios.get(`${API_URL}/api/layers/${layerName}/bounds`)
           .then(boundsResponse => {
             const bounds = boundsResponse.data
             if (bounds?.minx && bounds?.miny && bounds?.maxx && bounds?.maxy) {
@@ -420,7 +421,7 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
         const loadLayerData = async () => {
           try {
             // Construire l'URL avec les paramètres de filtre si applicable
-            let url = `http://localhost:5000/api/layers/${layerName}/geojson`
+            let url = `${API_URL}/api/layers/${layerName}/geojson`
             if (filter && filter.layer === layerName && filter.column && filter.value) {
               const params = new URLSearchParams({
                 column: filter.column,
