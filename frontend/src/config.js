@@ -17,6 +17,11 @@ const getApiUrl = () => {
   // Si le frontend est sur sig-frontend.onrender.com, le backend devrait être sur sig-backend.onrender.com
   const hostname = window.location.hostname
   if (hostname.includes('render.com')) {
+    // URL du backend spécifique : post-aypc.onrender.com
+    if (hostname.includes('sig-frontend') || hostname.includes('frontend')) {
+      // Si le frontend est sur sig-frontend.onrender.com, utiliser post-aypc.onrender.com
+      return 'https://post-aypc.onrender.com'
+    }
     // Essayer de remplacer 'frontend' par 'backend' dans l'URL
     if (hostname.includes('frontend')) {
       const backendUrl = hostname.replace('frontend', 'backend')
@@ -31,8 +36,8 @@ const getApiUrl = () => {
         const backendName = baseName.replace('-frontend', '-backend')
         return `https://${backendName}.onrender.com`
       }
-      // Sinon, ajouter '-backend' au nom
-      return `https://${baseName}-backend.onrender.com`
+      // Sinon, utiliser post-aypc.onrender.com par défaut pour les services Render
+      return 'https://post-aypc.onrender.com'
     }
   }
   

@@ -328,6 +328,20 @@ def get_layer_bounds(layer_name):
     finally:
         conn.close()
 
+@app.route('/', methods=['GET'])
+def root():
+    """Route racine pour vérifier que le serveur fonctionne"""
+    return jsonify({
+        'status': 'ok',
+        'message': 'API backend is running',
+        'endpoints': {
+            'layers': '/api/layers',
+            'health': '/api/health',
+            'layer_geojson': '/api/layers/<layer_name>/geojson',
+            'layer_bounds': '/api/layers/<layer_name>/bounds'
+        }
+    }), 200
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Vérifie la santé de l'API et de la connexion à la base de données"""
