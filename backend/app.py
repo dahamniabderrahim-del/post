@@ -98,6 +98,68 @@ def get_layers():
     finally:
         conn.close()
 
+@app.route('/api/layers/<layer_name>/columns', methods=['GET'])
+def get_layer_columns(layer_name):
+    """Récupère la liste des colonnes d'une couche"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Impossible de se connecter à la base de données'}), 500
+    
+    try:
+        cursor = conn.cursor(row_factory=dict_row)
+        
+        # Vérifier que la table existe
+        check_table_query = """
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = %s
+        );
+        """
+        cursor.execute(check_table_query, (layer_name,))
+        table_exists = cursor.fetchone()['exists']
+        
+        if not table_exists:
+            return jsonify({'error': f'Table "{layer_name}" n\'existe pas'}), 404
+        
+        # Trouver la colonne géométrique
+        find_geom_query = """
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public'
+        AND table_name = %s 
+        AND (data_type LIKE '%geometry%' OR udt_name = 'geometry')
+        LIMIT 1;
+        """
+        cursor.execute(find_geom_query, (layer_name,))
+        geom_result = cursor.fetchone()
+        
+        if not geom_result:
+            return jsonify({'error': 'Aucune colonne géométrique trouvée'}), 404
+        
+        geom_column = geom_result['column_name']
+        
+        # Récupérer toutes les colonnes non-géométriques
+        columns_query = """
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public'
+        AND table_name = %s 
+        AND column_name != %s
+        AND data_type NOT LIKE '%geometry%'
+        AND udt_name != 'geometry'
+        ORDER BY column_name;
+        """
+        cursor.execute(columns_query, (layer_name, geom_column))
+        columns = [row['column_name'] for row in cursor.fetchall()]
+        
+        return jsonify(columns)
+    except Exception as e:
+        print(f"❌ Erreur dans get_layer_columns pour {layer_name}: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
 @app.route('/api/layers/<layer_name>/geojson', methods=['GET'])
 def get_layer_geojson(layer_name):
     """Récupère les données d'une couche au format GeoJSON"""
@@ -107,6 +169,11 @@ def get_layer_geojson(layer_name):
     
     try:
         cursor = conn.cursor()
+        
+        # Récupérer les paramètres de filtre
+        filter_column = request.args.get('column')
+        filter_operator = request.args.get('operator')
+        filter_value = request.args.get('value')
         
         # Vérifier d'abord que la table existe
         check_table_query = f"""

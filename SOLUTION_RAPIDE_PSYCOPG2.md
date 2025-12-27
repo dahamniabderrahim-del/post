@@ -36,3 +36,5 @@ Redéployez sur Render. C'est tout !
 
 Python 3.13 est très récent et `psycopg2-binary` n'a pas encore de wheels compilés pour cette version. Python 3.11.9 est stable et bien supporté.
 
+
+

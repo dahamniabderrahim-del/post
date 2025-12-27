@@ -235,3 +235,5 @@ Pour tester localement avec le backend en production :
 
 ⚠️ **Note :** Assurez-vous que `ALLOWED_ORIGINS` dans le backend inclut `http://localhost:3000` pour le développement.
 
+
+

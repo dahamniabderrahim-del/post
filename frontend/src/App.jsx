@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react'
 import Map from './components/Map'
 import LayerPanel from './components/LayerPanel'
+import FilterPanel from './components/FilterPanel'
 import './App.css'
 
 function App() {
   const [layers, setLayers] = useState([])
   const [selectedLayers, setSelectedLayers] = useState([])
   const [layerColors, setLayerColors] = useState({})
+  const [filters, setFilters] = useState({})
   const mapRef = useRef(null)
 
   useEffect(() => {
@@ -58,6 +60,27 @@ function App() {
     }
   }
 
+  const handleFilterApply = (filter) => {
+    setFilters(prev => ({
+      ...prev,
+      [filter.layer]: filter
+    }))
+    // Recharger la couche avec le filtre
+    if (mapRef.current && mapRef.current.reloadLayer) {
+      mapRef.current.reloadLayer(filter.layer, filter)
+    }
+  }
+
+  const handleFilterClear = () => {
+    setFilters({})
+    // Recharger toutes les couches sans filtre
+    selectedLayers.forEach(layerName => {
+      if (mapRef.current && mapRef.current.reloadLayer) {
+        mapRef.current.reloadLayer(layerName, null)
+      }
+    })
+  }
+
   return (
     <div className="app">
       <header className="app-header">
@@ -81,6 +104,12 @@ function App() {
             ref={mapRef}
             selectedLayers={selectedLayers}
             layerColors={layerColors}
+            filters={filters}
+          />
+          <FilterPanel
+            selectedLayers={selectedLayers}
+            onFilterApply={handleFilterApply}
+            onFilterClear={handleFilterClear}
           />
         </main>
       </div>

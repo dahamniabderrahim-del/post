@@ -151,3 +151,5 @@ gunicorn==21.2.0
 
 Utilisez l'**Option C** (psycopg) qui fonctionne avec Python 3.13. C'est la solution la plus fiable si Render continue d'utiliser Python 3.13.
 
+
+

@@ -3,6 +3,7 @@ import { Map as OlMap, View } from 'ol'
 import TileLayer from 'ol/layer/Tile'
 import VectorLayer from 'ol/layer/Vector'
 import OSM from 'ol/source/OSM'
+import XYZ from 'ol/source/XYZ'
 import VectorSource from 'ol/source/Vector'
 import { fromLonLat, transformExtent, toLonLat } from 'ol/proj'
 import { Style, Stroke, Fill, Circle } from 'ol/style'
@@ -13,17 +14,20 @@ import 'ol/ol.css'
 import axios from 'axios'
 import FeaturePopup from './FeaturePopup'
 import MeasureTool from './MeasureTool'
+import './Map.css'
 
 // URL de l'API depuis les variables d'environnement
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
-const Map = forwardRef(({ selectedLayers, layerColors = {} }, ref) => {
+const Map = forwardRef(({ selectedLayers, layerColors = {}, filters = {} }, ref) => {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const vectorLayersRef = useRef({})
   const layerColorsRef = useRef({})
   const [selectedFeature, setSelectedFeature] = useState(null)
   const selectInteractionRef = useRef(null)
+  const [baseMapType, setBaseMapType] = useState('osm') // 'osm' ou 'satellite'
+  const baseLayerRef = useRef(null)
 
   useImperativeHandle(ref, () => ({
     getMap: () => mapInstanceRef.current,
@@ -94,6 +98,52 @@ const Map = forwardRef(({ selectedLayers, layerColors = {} }, ref) => {
       layer.setStyle(createStyleFunction(color))
       layer.changed()
     },
+    reloadLayer: (layerName, filter = null) => {
+      if (!mapInstanceRef.current) return
+      
+      const layer = vectorLayersRef.current[layerName]
+      if (!layer) return
+      
+      const source = layer.getSource()
+      if (!source) return
+      
+      // Recharger les données avec le filtre
+      const loadLayerData = async () => {
+        try {
+          let url = `${API_URL}/api/layers/${layerName}/geojson`
+          if (filter) {
+            url += `?column=${encodeURIComponent(filter.column)}&operator=${encodeURIComponent(filter.operator)}&value=${encodeURIComponent(filter.value)}`
+          }
+          
+          const response = await axios.get(url)
+          const geojsonData = response.data
+          
+          if (geojsonData?.features && geojsonData.features.length > 0) {
+            const geojsonFormat = new GeoJSON({
+              dataProjection: 'EPSG:4326',
+              featureProjection: 'EPSG:3857'
+            })
+            
+            const features = geojsonFormat.readFeatures(geojsonData, {
+              featureProjection: 'EPSG:3857',
+              dataProjection: 'EPSG:4326'
+            })
+            
+            features.forEach(feature => {
+              feature.set('_layerName', layerName)
+            })
+            
+            source.clear()
+            source.addFeatures(features)
+            layer.changed()
+          }
+        } catch (err) {
+          console.error(`[${layerName}] Erreur lors du rechargement:`, err)
+        }
+      }
+      
+      loadLayerData()
+    },
     zoomToLayer: (layerName) => {
       if (!mapInstanceRef.current) return
       
@@ -154,13 +204,25 @@ const Map = forwardRef(({ selectedLayers, layerColors = {} }, ref) => {
       'EPSG:3857'
     )
 
+    // Créer la couche OSM
+    const osmLayer = new TileLayer({
+      source: new OSM()
+    })
+
+    // Créer la couche satellite (ArcGIS World Imagery)
+    const satelliteLayer = new TileLayer({
+      source: new XYZ({
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attributions: '© Esri'
+      })
+    })
+
+    // Couche de base par défaut
+    baseLayerRef.current = osmLayer
+
     const map = new OlMap({
       target: mapRef.current,
-      layers: [
-        new TileLayer({
-          source: new OSM()
-        })
-      ],
+      layers: [osmLayer],
       view: new View({
         center: fromLonLat([3.0, 28.0]), // Centre de l'Algérie
         zoom: 6
@@ -168,6 +230,10 @@ const Map = forwardRef(({ selectedLayers, layerColors = {} }, ref) => {
     })
 
     mapInstanceRef.current = map
+
+    // Stocker les couches pour le basculement
+    map.set('_osmLayer', osmLayer)
+    map.set('_satelliteLayer', satelliteLayer)
 
     // Ajouter l'interaction de sélection pour les clics
     const selectInteraction = new Select({
@@ -311,7 +377,14 @@ const Map = forwardRef(({ selectedLayers, layerColors = {} }, ref) => {
         // Charger les données GeoJSON avec une approche simplifiée
         const loadLayerData = async () => {
           try {
-            const response = await axios.get(`${API_URL}/api/layers/${layerName}/geojson`)
+            // Construire l'URL avec les filtres si disponibles
+            let url = `${API_URL}/api/layers/${layerName}/geojson`
+            const filter = filters[layerName]
+            if (filter) {
+              url += `?column=${encodeURIComponent(filter.column)}&operator=${encodeURIComponent(filter.operator)}&value=${encodeURIComponent(filter.value)}`
+            }
+            
+            const response = await axios.get(url)
             const geojsonData = response.data
             
             console.log(`[${layerName}] Données reçues, features:`, geojsonData?.features?.length || 0)
@@ -387,7 +460,7 @@ const Map = forwardRef(({ selectedLayers, layerColors = {} }, ref) => {
         loadLayerData()
       }
     })
-  }, [selectedLayers])
+  }, [selectedLayers, filters])
 
   // Mettre à jour les couleurs quand layerColors change
   useEffect(() => {
@@ -449,9 +522,44 @@ const Map = forwardRef(({ selectedLayers, layerColors = {} }, ref) => {
     })
   }, [layerColors])
 
+  const toggleBaseMap = () => {
+    if (!mapInstanceRef.current) return
+    
+    const map = mapInstanceRef.current
+    const osmLayer = map.get('_osmLayer')
+    const satelliteLayer = map.get('_satelliteLayer')
+    
+    if (!osmLayer || !satelliteLayer) return
+    
+    // Retirer la couche actuelle
+    if (baseLayerRef.current) {
+      map.removeLayer(baseLayerRef.current)
+    }
+    
+    // Ajouter la nouvelle couche
+    if (baseMapType === 'osm') {
+      map.getLayers().insertAt(0, satelliteLayer)
+      baseLayerRef.current = satelliteLayer
+      setBaseMapType('satellite')
+    } else {
+      map.getLayers().insertAt(0, osmLayer)
+      baseLayerRef.current = osmLayer
+      setBaseMapType('osm')
+    }
+  }
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={mapRef} className="ol-map" />
+      <div className="map-controls">
+        <button 
+          className="base-map-toggle"
+          onClick={toggleBaseMap}
+          title={`Basculer vers ${baseMapType === 'osm' ? 'Satellite' : 'OSM'}`}
+        >
+          {baseMapType === 'osm' ? '🛰️' : '🗺️'}
+        </button>
+      </div>
       {mapInstanceRef.current && (
         <MeasureTool map={mapInstanceRef.current} />
       )}

@@ -125,3 +125,5 @@ Cette URL peut être légèrement différente mais devrait fonctionner.
 3. **Testez la connexion** avec SQL Shell (comme vous l'avez fait précédemment)
 4. **Vérifiez les credentials** (user, password, database name)
 
+
+

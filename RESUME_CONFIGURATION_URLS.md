@@ -147,3 +147,5 @@ ALLOWED_ORIGINS=https://sig-frontend.netlify.app,https://sig-frontend.vercel.app
 3. Vérifiez que `ALLOWED_ORIGINS` contient l'URL du frontend
 4. Redéployez frontend et backend
 
+
+
