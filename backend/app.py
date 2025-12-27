@@ -4,6 +4,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import json
 import os
+from urllib.parse import urlparse
 
 app = Flask(__name__)
 
@@ -30,13 +31,32 @@ CORS(app, resources={
 }, allow_origin_regex=r"https://.*\.onrender\.com")
 
 # Configuration de la base de données PostgreSQL
-DB_CONFIG = {
-    'host': 'localhost',
-    'port': 5432,
-    'database': 'pos',
-    'user': 'postgres',
-    'password': 'Admin123'
-}
+# Supporte DATABASE_URL (format URL) ou variables individuelles
+def get_db_config():
+    """Récupère la configuration de la base de données depuis les variables d'environnement"""
+    database_url = os.getenv('DATABASE_URL')
+    
+    if database_url:
+        # Format: postgresql://user:password@host:port/database
+        result = urlparse(database_url)
+        return {
+            'host': result.hostname,
+            'port': result.port or 5432,
+            'database': result.path[1:],  # Enlever le '/' initial
+            'user': result.username,
+            'password': result.password
+        }
+    else:
+        # Utiliser des variables individuelles ou valeurs par défaut pour développement
+        return {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': int(os.getenv('DB_PORT', 5432)),
+            'database': os.getenv('DB_NAME', 'pos'),
+            'user': os.getenv('DB_USER', 'postgres'),
+            'password': os.getenv('DB_PASSWORD', 'Admin123')
+        }
+
+DB_CONFIG = get_db_config()
 
 def get_db_connection():
     """Établit une connexion à la base de données PostgreSQL"""
