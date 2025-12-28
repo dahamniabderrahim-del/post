@@ -489,6 +489,10 @@ def get_layer_raster(layer_name):
             else:
                 minx, miny, maxx, maxy = minx_wgs84, miny_wgs84, maxx_wgs84, maxy_wgs84
             
+            # Initialiser les variables pour le format d'image
+            image_format = None
+            mimetype = None
+            
             # Récupérer le raster et le convertir en image
             # GDAL est disponible, utiliser ST_AsGDALRaster avec des options explicites
             # Essayer d'abord JPEG, puis PNG si JPEG échoue
@@ -569,6 +573,10 @@ def get_layer_raster(layer_name):
             safe_width = min(width, 2048)
             safe_height = min(height, 2048)
             
+            # Initialiser les variables pour le format d'image
+            image_format = None
+            mimetype = None
+            
             # Essayer JPEG d'abord, puis PNG
             try:
                 raster_query = f"""
@@ -621,11 +629,19 @@ def get_layer_raster(layer_name):
                         'details': 'Les pilotes JPEG et PNG ne sont pas disponibles. Vérifiez les pilotes avec: SELECT * FROM ST_GDALDrivers();'
                     }), 500
         
+        # Vérifier que le format d'image a été défini (devrait toujours être défini à ce stade)
+        if image_format is None or mimetype is None:
+            print(f"❌ Raster {layer_name}: Format d'image non défini (erreur de programmation)")
+            return jsonify({
+                'error': 'Erreur interne: format d\'image non défini',
+                'details': 'Vérifiez les logs du serveur pour plus de détails.'
+            }), 500
+        
         result = cursor.fetchone()
         
         if not result or not result[0]:
             print(f"❌ Raster {layer_name}: Aucune donnée retournée")
-            return jsonify({'error': 'Impossible de générer l\'image raster'}), 500
+            return jsonify({'error': 'Impossible de générer l\'image raster (aucune donnée retournée)'}), 500
         
         image_data = result[0]
         
@@ -669,10 +685,19 @@ def get_layer_raster(layer_name):
         return response
         
     except Exception as e:
-        print(f"❌ Erreur dans get_layer_raster: {e}")
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        error_msg = str(e)
+        error_trace = traceback.format_exc()
+        print(f"❌ Erreur dans get_layer_raster pour {layer_name}: {error_msg}")
+        print(f"📋 Traceback complet:\n{error_trace}")
+        return jsonify({
+            'error': 'Erreur lors de la génération de l\'image raster',
+            'details': error_msg,
+            'layer': layer_name
+        }), 500
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 @app.route('/api/layers/<layer_name>/raster/bounds', methods=['GET'])
 def get_raster_bounds(layer_name):
