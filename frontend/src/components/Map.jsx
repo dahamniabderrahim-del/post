@@ -27,6 +27,7 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
   const rasterLayersRef = useRef({})
   const layerColorsRef = useRef({})
   const layerTypesRef = useRef({}) // Stocker le type de chaque couche (vector/raster)
+  const rasterErrorCountRef = useRef({}) // Compter les erreurs pour chaque raster
   const [selectedFeature, setSelectedFeature] = useState(null)
   const selectInteractionRef = useRef(null)
   const blinkAnimationRef = useRef({})
@@ -379,6 +380,8 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
           const existingLayer = rasterLayersRef.current[layerName]
           map.removeLayer(existingLayer)
           delete rasterLayersRef.current[layerName]
+          // Réinitialiser le compteur d'erreur quand on supprime la couche
+          delete rasterErrorCountRef.current[layerName]
         }
         
         // Arrêter l'animation si elle existe
@@ -451,7 +454,49 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
                       image.getImage().src = img.src
                     }
                     img.onerror = (error) => {
-                      console.error(`[${layerName}] ❌ Erreur de chargement de l'image:`, error)
+                      // Incrémenter le compteur d'erreur
+                      if (!rasterErrorCountRef.current[layerName]) {
+                        rasterErrorCountRef.current[layerName] = 0
+                      }
+                      rasterErrorCountRef.current[layerName]++
+                      
+                      const errorCount = rasterErrorCountRef.current[layerName]
+                      
+                      if (errorCount === 1) {
+                        // Première erreur: essayer de récupérer le message d'erreur depuis le serveur
+                        fetch(src, { method: 'GET' })
+                          .then(response => {
+                            if (!response.ok) {
+                              return response.json().catch(() => null)
+                            }
+                            return null
+                          })
+                          .then(errorData => {
+                            if (errorData?.error || errorData?.details) {
+                              console.error(`[${layerName}] ❌ Erreur serveur:`, errorData.error || errorData.details)
+                              if (errorData.details?.includes('GDAL') || errorData.details?.includes('pilote')) {
+                                console.warn(`[${layerName}] ⚠️ Les pilotes GDAL ne sont pas disponibles. La couche raster ne peut pas être affichée.`)
+                                // Désactiver la couche après 2 erreurs
+                                if (errorCount >= 2 && rasterLayersRef.current[layerName]) {
+                                  rasterLayersRef.current[layerName].setVisible(false)
+                                }
+                              }
+                            } else {
+                              console.error(`[${layerName}] ❌ Erreur de chargement de l'image raster (erreur ${errorCount})`)
+                            }
+                          })
+                          .catch(() => {
+                            console.error(`[${layerName}] ❌ Erreur de chargement de l'image raster (erreur ${errorCount})`)
+                          })
+                      } else if (errorCount >= 3) {
+                        console.warn(`[${layerName}] ⚠️ Trop d'erreurs (${errorCount}). Arrêt des tentatives de chargement.`)
+                        // Désactiver la couche si elle existe
+                        if (rasterLayersRef.current[layerName]) {
+                          rasterLayersRef.current[layerName].setVisible(false)
+                        }
+                      } else {
+                        console.error(`[${layerName}] ❌ Erreur de chargement de l'image raster (erreur ${errorCount}/3)`)
+                      }
                       console.error(`[${layerName}] URL:`, src)
                     }
                     img.src = src
@@ -499,7 +544,45 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
                     image.getImage().src = img.src
                   }
                   img.onerror = (error) => {
-                    console.error(`[${layerName}] ❌ Erreur de chargement de l'image raster:`, error)
+                    // Incrémenter le compteur d'erreur
+                    if (!rasterErrorCountRef.current[layerName]) {
+                      rasterErrorCountRef.current[layerName] = 0
+                    }
+                    rasterErrorCountRef.current[layerName]++
+                    
+                    const errorCount = rasterErrorCountRef.current[layerName]
+                    
+                    if (errorCount === 1) {
+                      // Première erreur: essayer de récupérer le message d'erreur depuis le serveur
+                      fetch(src, { method: 'GET' })
+                        .then(response => {
+                          if (!response.ok) {
+                            return response.json().catch(() => null)
+                          }
+                          return null
+                        })
+                        .then(errorData => {
+                          if (errorData?.error || errorData?.details) {
+                            console.error(`[${layerName}] ❌ Erreur serveur:`, errorData.error || errorData.details)
+                            if (errorData.details?.includes('GDAL') || errorData.details?.includes('pilote')) {
+                              console.warn(`[${layerName}] ⚠️ Les pilotes GDAL ne sont pas disponibles. La couche raster ne peut pas être affichée.`)
+                            }
+                          } else {
+                            console.error(`[${layerName}] ❌ Erreur de chargement de l'image raster (erreur ${errorCount})`)
+                          }
+                        })
+                        .catch(() => {
+                          console.error(`[${layerName}] ❌ Erreur de chargement de l'image raster (erreur ${errorCount})`)
+                        })
+                    } else if (errorCount >= 3) {
+                      console.warn(`[${layerName}] ⚠️ Trop d'erreurs (${errorCount}). Arrêt des tentatives de chargement.`)
+                      // Désactiver la couche si elle existe
+                      if (rasterLayersRef.current[layerName]) {
+                        rasterLayersRef.current[layerName].setVisible(false)
+                      }
+                    } else {
+                      console.error(`[${layerName}] ❌ Erreur de chargement de l'image raster (erreur ${errorCount}/3)`)
+                    }
                     console.error(`[${layerName}] URL:`, src)
                   }
                   img.src = src
@@ -533,6 +616,10 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
               console.error(`[${layerName}] ❌ Erreur lors du chargement du raster:`, error)
               if (error.response) {
                 console.error(`[${layerName}] Status:`, error.response.status, 'Data:', error.response.data)
+                // Vérifier si c'est une erreur GDAL
+                if (error.response.data?.details?.includes('GDAL') || error.response.data?.details?.includes('pilote')) {
+                  console.warn(`[${layerName}] ⚠️ Les pilotes GDAL ne sont pas disponibles. La couche raster ne peut pas être affichée.`)
+                }
               }
             }
           }
