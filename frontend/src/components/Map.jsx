@@ -113,6 +113,53 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
       if (!mapInstanceRef.current) return
       
       const map = mapInstanceRef.current
+      const layerType = layerTypesRef.current[layerName]
+      
+      // Vérifier si c'est une couche raster
+      if (layerType === 'raster') {
+        // Pour les rasters, utiliser l'endpoint bounds
+        axios.get(`${API_URL}/api/layers/${layerName}/raster/bounds`)
+          .then(boundsResponse => {
+            const bounds = boundsResponse.data
+            if (bounds?.minx && bounds?.miny && bounds?.maxx && bounds?.maxy) {
+              const extent = transformExtent(
+                [bounds.minx, bounds.miny, bounds.maxx, bounds.maxy],
+                'EPSG:4326',
+                'EPSG:3857'
+              )
+              console.log(`[${layerName}] Zoom sur raster extent:`, extent)
+              map.getView().fit(extent, {
+                padding: [50, 50, 50, 50],
+                duration: 1000,
+                maxZoom: 18
+              })
+            }
+          })
+          .catch(err => {
+            console.error(`[${layerName}] Erreur bounds raster:`, err)
+            // Fallback vers l'endpoint bounds standard
+            axios.get(`${API_URL}/api/layers/${layerName}/bounds`)
+              .then(boundsResponse => {
+                const bounds = boundsResponse.data
+                if (bounds?.minx && bounds?.miny && bounds?.maxx && bounds?.maxy) {
+                  const extent = transformExtent(
+                    [bounds.minx, bounds.miny, bounds.maxx, bounds.maxy],
+                    'EPSG:4326',
+                    'EPSG:3857'
+                  )
+                  map.getView().fit(extent, {
+                    padding: [50, 50, 50, 50],
+                    duration: 1000,
+                    maxZoom: 18
+                  })
+                }
+              })
+              .catch(err2 => console.error(`[${layerName}] Erreur bounds:`, err2))
+          })
+        return
+      }
+      
+      // Pour les couches vectorielles
       const layer = vectorLayersRef.current[layerName]
       
       if (!layer) {
