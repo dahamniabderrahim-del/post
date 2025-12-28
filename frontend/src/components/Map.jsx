@@ -254,8 +254,12 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
         if (layer.name && layer.type) {
           layerTypeMap[layer.name] = layer.type
           layerTypesRef.current[layer.name] = layer.type
+          if (layer.type === 'raster') {
+            console.log(`🗺️ Couche raster détectée: ${layer.name}`)
+          }
         }
       })
+      console.log(`📋 Total couches: ${layers.length}, Types:`, layers.map(l => `${l.name}(${l.type || 'vector'})`).join(', '))
     }
 
     // Supprimer les couches qui ne sont plus sélectionnées (vectorielles et raster)
@@ -338,15 +342,18 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
         
         // Créer la nouvelle couche selon son type
         if (layerType === 'raster') {
+          console.log(`[${layerName}] 🖼️ Création d'une couche raster`)
           // Créer une couche raster
           const loadRasterLayer = async () => {
             try {
+              console.log(`[${layerName}] 📡 Récupération des limites du raster...`)
               // Récupérer les limites du raster
               const boundsResponse = await axios.get(`${API_URL}/api/layers/${layerName}/raster/bounds`)
               const bounds = boundsResponse.data
+              console.log(`[${layerName}] 📦 Limites reçues:`, bounds)
               
               if (!bounds || !bounds.minx || !bounds.miny || !bounds.maxx || !bounds.maxy) {
-                console.error(`Impossible de récupérer les limites pour le raster ${layerName}`)
+                console.error(`[${layerName}] ❌ Impossible de récupérer les limites pour le raster`)
                 return
               }
               
@@ -357,6 +364,7 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
                 'EPSG:4326',
                 'EPSG:3857'
               )
+              console.log(`[${layerName}] 🗺️ Extent transformé:`, imageExtent)
               
               // Créer une fonction pour charger l'image dynamiquement
               const loadRasterImage = () => {
@@ -364,7 +372,10 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
                 const extent = view.getExtent()
                 const size = map.getSize()
                 
-                if (!extent || !size) return
+                if (!extent || !size) {
+                  console.warn(`[${layerName}] ⚠️ Extent ou size non disponible`)
+                  return
+                }
                 
                 // Convertir l'étendue en coordonnées WGS84
                 const wgs84Extent = transformExtent(extent, 'EPSG:3857', 'EPSG:4326')
@@ -375,6 +386,7 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
                 const height = size[1]
                 
                 const url = `${API_URL}/api/layers/${layerName}/raster?bbox=${bbox}&width=${width}&height=${height}`
+                console.log(`[${layerName}] 🔗 URL raster:`, url)
                 
                 // Créer une nouvelle source d'image avec l'URL dynamique
                 const imageSource = new ImageStatic({
@@ -385,18 +397,43 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
                 
                 // Mettre à jour la source de la couche
                 if (rasterLayersRef.current[layerName]) {
+                  console.log(`[${layerName}] 🔄 Mise à jour de la source raster`)
                   rasterLayersRef.current[layerName].setSource(imageSource)
                 }
               }
               
-              // Charger l'image initiale
-              loadRasterImage()
-              
               // Créer la couche raster avec une source initiale
+              // Pour l'image initiale, utiliser l'étendue complète du raster
+              const view = map.getView()
+              const currentExtent = view.getExtent()
+              const size = map.getSize()
+              
+              let initialUrl
+              if (currentExtent && size) {
+                const wgs84Extent = transformExtent(currentExtent, 'EPSG:3857', 'EPSG:4326')
+                const bbox = `${wgs84Extent[0]},${wgs84Extent[1]},${wgs84Extent[2]},${wgs84Extent[3]}`
+                initialUrl = `${API_URL}/api/layers/${layerName}/raster?bbox=${bbox}&width=${size[0]}&height=${size[1]}`
+              } else {
+                // Fallback: utiliser l'étendue complète du raster
+                const bbox = `${bounds.minx},${bounds.miny},${bounds.maxx},${bounds.maxy}`
+                initialUrl = `${API_URL}/api/layers/${layerName}/raster?bbox=${bbox}&width=512&height=512`
+              }
+              
+              console.log(`[${layerName}] 🖼️ URL initiale:`, initialUrl)
+              
               const initialImageSource = new ImageStatic({
-                url: `${API_URL}/api/layers/${layerName}/raster`,
+                url: initialUrl,
                 imageExtent: imageExtent,
                 projection: getProjection('EPSG:3857')
+              })
+              
+              // Gérer les erreurs de chargement d'image
+              initialImageSource.on('imageloaderror', (event) => {
+                console.error(`[${layerName}] ❌ Erreur de chargement de l'image raster:`, event)
+              })
+              
+              initialImageSource.on('imageloadend', () => {
+                console.log(`[${layerName}] ✅ Image raster chargée avec succès`)
               })
               
               const rasterLayer = new ImageLayer({
@@ -408,6 +445,7 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
               
               rasterLayersRef.current[layerName] = rasterLayer
               map.addLayer(rasterLayer)
+              console.log(`[${layerName}] ✅ Couche raster ajoutée à la carte`)
               
               // Mettre à jour le raster quand la vue change (avec debounce)
               let updateTimeout = null
@@ -422,7 +460,10 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
               map.getView().on('change:resolution', updateRaster)
               
             } catch (error) {
-              console.error(`Erreur lors du chargement du raster ${layerName}:`, error)
+              console.error(`[${layerName}] ❌ Erreur lors du chargement du raster:`, error)
+              if (error.response) {
+                console.error(`[${layerName}] Status:`, error.response.status, 'Data:', error.response.data)
+              }
             }
           }
           

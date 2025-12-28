@@ -451,40 +451,53 @@ def get_layer_raster(layer_name):
                 return jsonify({'error': 'Format bbox invalide. Utilisez: minx,miny,maxx,maxy'}), 400
             
             minx, miny, maxx, maxy = map(float, bbox_parts)
-            bbox_geom = f"ST_MakeEnvelope({minx}, {miny}, {maxx}, {maxy}, 4326)"
+            print(f"🖼️ Raster {layer_name}: bbox={bbox}, width={width}, height={height}")
             
             # Récupérer le raster et le convertir en PNG
+            # Note: ST_Intersects avec raster nécessite ST_Envelope ou ST_ConvexHull
             raster_query = f"""
             SELECT ST_AsPNG(
                 ST_Resize(
                     ST_Union(
-                        ST_Clip({raster_column}, {bbox_geom})
+                        ST_Clip({raster_column}, ST_MakeEnvelope(%s, %s, %s, %s, 4326))
                     ),
-                    {width}, {height}
+                    %s, %s
                 )
             ) as png_data
             FROM "{layer_name}"
-            WHERE ST_Intersects({raster_column}, {bbox_geom});
+            WHERE ST_Intersects(
+                ST_Envelope({raster_column}),
+                ST_MakeEnvelope(%s, %s, %s, %s, 4326)
+            );
             """
+            cursor.execute(raster_query, (minx, miny, maxx, maxy, width, height, minx, miny, maxx, maxy))
         else:
             # Récupérer toute l'étendue du raster
+            print(f"🖼️ Raster {layer_name}: pas de bbox, utilisation de toute l'étendue")
             raster_query = f"""
             SELECT ST_AsPNG(
                 ST_Resize(
                     ST_Union({raster_column}),
-                    {width}, {height}
+                    %s, %s
                 )
             ) as png_data
             FROM "{layer_name}";
             """
+            cursor.execute(raster_query, (width, height))
         
-        cursor.execute(raster_query)
         result = cursor.fetchone()
         
         if not result or not result[0]:
+            print(f"❌ Raster {layer_name}: Aucune donnée retournée")
             return jsonify({'error': 'Impossible de générer l\'image raster'}), 500
         
         png_data = result[0]
+        
+        if not png_data:
+            print(f"❌ Raster {layer_name}: Données PNG vides")
+            return jsonify({'error': 'Impossible de générer l\'image raster (données vides)'}), 500
+        
+        print(f"✅ Raster {layer_name}: Image PNG générée ({len(png_data)} bytes)")
         
         # Retourner l'image PNG
         return Response(png_data, mimetype='image/png')
@@ -532,9 +545,11 @@ def get_raster_bounds(layer_name):
         raster_result = cursor.fetchone()
         
         if not raster_result:
+            print(f"❌ Raster bounds {layer_name}: Aucune colonne raster trouvée")
             return jsonify({'error': f'Aucune colonne raster trouvée pour "{layer_name}"'}), 404
         
         raster_column = raster_result[0]
+        print(f"✅ Raster bounds {layer_name}: Colonne raster trouvée: {raster_column}")
         
         # Récupérer les limites du raster
         bounds_query = f"""
@@ -546,10 +561,12 @@ def get_raster_bounds(layer_name):
         FROM "{layer_name}";
         """
         
+        print(f"📐 Raster bounds {layer_name}: Exécution de la requête...")
         cursor.execute(bounds_query)
         bounds = cursor.fetchone()
         
         if bounds and all(bounds):
+            print(f"✅ Raster bounds {layer_name}: {bounds[0]}, {bounds[1]}, {bounds[2]}, {bounds[3]}")
             return jsonify({
                 'minx': bounds[0],
                 'miny': bounds[1],
@@ -557,6 +574,7 @@ def get_raster_bounds(layer_name):
                 'maxy': bounds[3]
             })
         else:
+            print(f"❌ Raster bounds {layer_name}: Impossible de calculer les limites")
             return jsonify({'error': 'Impossible de calculer les limites'}), 404
             
     except Exception as e:
