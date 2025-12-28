@@ -1,10 +1,12 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import json
 import os
 from urllib.parse import urlparse
+import base64
+import io
 
 app = Flask(__name__)
 
@@ -69,18 +71,19 @@ def get_db_connection():
 
 @app.route('/api/layers', methods=['GET'])
 def get_layers():
-    """Récupère la liste de toutes les tables/couches géospatiales"""
+    """Récupère la liste de toutes les tables/couches géospatiales (vectorielles et raster)"""
     conn = get_db_connection()
     if not conn:
         return jsonify({'error': 'Impossible de se connecter à la base de données'}), 500
     
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
-        # Récupère toutes les tables avec des colonnes géométriques
-        query = """
+        # Récupère toutes les tables avec des colonnes géométriques (vectorielles)
+        vector_query = """
         SELECT 
             f.table_name as name,
-            f.table_schema as schema
+            f.table_schema as schema,
+            'vector' as type
         FROM 
             information_schema.tables f
         WHERE 
@@ -93,13 +96,43 @@ def get_layers():
                 AND c.table_name = f.table_name
                 AND (c.data_type LIKE '%geometry%' OR c.udt_name = 'geometry')
             )
-        ORDER BY f.table_name;
         """
-        cursor.execute(query)
-        layers = cursor.fetchall()
-        layer_list = [dict(layer) for layer in layers]
-        print(f"📋 {len(layer_list)} couche(s) trouvée(s)")
-        return jsonify(layer_list)
+        
+        # Récupère toutes les tables avec des colonnes raster
+        raster_query = """
+        SELECT 
+            f.table_name as name,
+            f.table_schema as schema,
+            'raster' as type
+        FROM 
+            information_schema.tables f
+        WHERE 
+            f.table_schema = 'public'
+            AND f.table_type = 'BASE TABLE'
+            AND EXISTS (
+                SELECT 1 
+                FROM information_schema.columns c
+                WHERE c.table_schema = f.table_schema
+                AND c.table_name = f.table_name
+                AND (c.data_type LIKE '%raster%' OR c.udt_name = 'raster')
+            )
+        """
+        
+        # Exécuter les deux requêtes
+        cursor.execute(vector_query)
+        vector_layers = cursor.fetchall()
+        
+        cursor.execute(raster_query)
+        raster_layers = cursor.fetchall()
+        
+        # Combiner les résultats
+        all_layers = [dict(layer) for layer in vector_layers] + [dict(layer) for layer in raster_layers]
+        
+        # Trier par nom
+        all_layers.sort(key=lambda x: x['name'])
+        
+        print(f"📋 {len(all_layers)} couche(s) trouvée(s) ({len(vector_layers)} vectorielle(s), {len(raster_layers)} raster(s))")
+        return jsonify(all_layers)
     except Exception as e:
         print(f"❌ Erreur dans get_layers: {e}")
         return jsonify({'error': str(e)}), 500
@@ -358,9 +391,178 @@ def root():
             'layers': '/api/layers',
             'health': '/api/health',
             'layer_geojson': '/api/layers/<layer_name>/geojson',
-            'layer_bounds': '/api/layers/<layer_name>/bounds'
+            'layer_bounds': '/api/layers/<layer_name>/bounds',
+            'layer_raster': '/api/layers/<layer_name>/raster',
+            'raster_bounds': '/api/layers/<layer_name>/raster/bounds'
         }
     }), 200
+
+@app.route('/api/layers/<layer_name>/raster', methods=['GET'])
+def get_layer_raster(layer_name):
+    """Récupère une image raster PostGIS pour une étendue donnée"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Impossible de se connecter à la base de données'}), 500
+    
+    try:
+        # Récupérer les paramètres de l'étendue (bbox)
+        bbox = request.args.get('bbox')
+        width = int(request.args.get('width', 256))
+        height = int(request.args.get('height', 256))
+        
+        cursor = conn.cursor()
+        
+        # Vérifier que la table existe
+        check_table_query = f"""
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = '{layer_name}'
+        );
+        """
+        cursor.execute(check_table_query)
+        table_exists = cursor.fetchone()[0]
+        
+        if not table_exists:
+            return jsonify({'error': f'Table "{layer_name}" n\'existe pas'}), 404
+        
+        # Trouver la colonne raster
+        find_raster_query = f"""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public'
+        AND table_name = '{layer_name}' 
+        AND (data_type LIKE '%raster%' OR udt_name = 'raster')
+        LIMIT 1;
+        """
+        cursor.execute(find_raster_query)
+        raster_result = cursor.fetchone()
+        
+        if not raster_result:
+            return jsonify({'error': f'Aucune colonne raster trouvée pour "{layer_name}"'}), 404
+        
+        raster_column = raster_result[0]
+        
+        # Si bbox est fourni, utiliser ST_Clip, sinon utiliser toute l'étendue
+        if bbox:
+            # bbox format: minx,miny,maxx,maxy
+            bbox_parts = bbox.split(',')
+            if len(bbox_parts) != 4:
+                return jsonify({'error': 'Format bbox invalide. Utilisez: minx,miny,maxx,maxy'}), 400
+            
+            minx, miny, maxx, maxy = map(float, bbox_parts)
+            bbox_geom = f"ST_MakeEnvelope({minx}, {miny}, {maxx}, {maxy}, 4326)"
+            
+            # Récupérer le raster et le convertir en PNG
+            raster_query = f"""
+            SELECT ST_AsPNG(
+                ST_Resize(
+                    ST_Union(
+                        ST_Clip({raster_column}, {bbox_geom})
+                    ),
+                    {width}, {height}
+                )
+            ) as png_data
+            FROM "{layer_name}"
+            WHERE ST_Intersects({raster_column}, {bbox_geom});
+            """
+        else:
+            # Récupérer toute l'étendue du raster
+            raster_query = f"""
+            SELECT ST_AsPNG(
+                ST_Resize(
+                    ST_Union({raster_column}),
+                    {width}, {height}
+                )
+            ) as png_data
+            FROM "{layer_name}";
+            """
+        
+        cursor.execute(raster_query)
+        result = cursor.fetchone()
+        
+        if not result or not result[0]:
+            return jsonify({'error': 'Impossible de générer l\'image raster'}), 500
+        
+        png_data = result[0]
+        
+        # Retourner l'image PNG
+        return Response(png_data, mimetype='image/png')
+        
+    except Exception as e:
+        print(f"❌ Erreur dans get_layer_raster: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/layers/<layer_name>/raster/bounds', methods=['GET'])
+def get_raster_bounds(layer_name):
+    """Récupère les limites (bounding box) d'une couche raster"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Impossible de se connecter à la base de données'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Vérifier que la table existe
+        check_table_query = f"""
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = '{layer_name}'
+        );
+        """
+        cursor.execute(check_table_query)
+        table_exists = cursor.fetchone()[0]
+        
+        if not table_exists:
+            return jsonify({'error': f'Table "{layer_name}" n\'existe pas'}), 404
+        
+        # Trouver la colonne raster
+        find_raster_query = f"""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public'
+        AND table_name = '{layer_name}' 
+        AND (data_type LIKE '%raster%' OR udt_name = 'raster')
+        LIMIT 1;
+        """
+        cursor.execute(find_raster_query)
+        raster_result = cursor.fetchone()
+        
+        if not raster_result:
+            return jsonify({'error': f'Aucune colonne raster trouvée pour "{layer_name}"'}), 404
+        
+        raster_column = raster_result[0]
+        
+        # Récupérer les limites du raster
+        bounds_query = f"""
+        SELECT 
+            ST_XMin(ST_Envelope(ST_Union({raster_column}))) as minx,
+            ST_YMin(ST_Envelope(ST_Union({raster_column}))) as miny,
+            ST_XMax(ST_Envelope(ST_Union({raster_column}))) as maxx,
+            ST_YMax(ST_Envelope(ST_Union({raster_column}))) as maxy
+        FROM "{layer_name}";
+        """
+        
+        cursor.execute(bounds_query)
+        bounds = cursor.fetchone()
+        
+        if bounds and all(bounds):
+            return jsonify({
+                'minx': bounds[0],
+                'miny': bounds[1],
+                'maxx': bounds[2],
+                'maxy': bounds[3]
+            })
+        else:
+            return jsonify({'error': 'Impossible de calculer les limites'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
 
 @app.route('/api/health', methods=['GET'])
 def health_check():

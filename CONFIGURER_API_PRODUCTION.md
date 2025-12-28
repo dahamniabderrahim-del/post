@@ -95,3 +95,5 @@ Si vous avez encore des erreurs CORS après ces modifications :
 3. Testez l'application sur https://sig-frontend.onrender.com
 4. Vérifiez que les couches se chargent correctement
 
+
+

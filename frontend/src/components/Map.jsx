@@ -2,13 +2,16 @@ import React, { useEffect, useRef, forwardRef, useImperativeHandle, useState } f
 import { Map as OlMap, View } from 'ol'
 import TileLayer from 'ol/layer/Tile'
 import VectorLayer from 'ol/layer/Vector'
+import ImageLayer from 'ol/layer/Image'
 import OSM from 'ol/source/OSM'
 import VectorSource from 'ol/source/Vector'
-import { fromLonLat, transformExtent, toLonLat } from 'ol/proj'
+import ImageStatic from 'ol/source/ImageStatic'
+import { fromLonLat, transformExtent, toLonLat, get as getProjection } from 'ol/proj'
 import { Style, Stroke, Fill, Circle } from 'ol/style'
 import GeoJSON from 'ol/format/GeoJSON'
 import { click } from 'ol/events/condition'
 import { Select } from 'ol/interaction'
+import { getCenter } from 'ol/extent'
 import 'ol/ol.css'
 import axios from 'axios'
 import { API_URL } from '../config'
@@ -21,7 +24,9 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const vectorLayersRef = useRef({})
+  const rasterLayersRef = useRef({})
   const layerColorsRef = useRef({})
+  const layerTypesRef = useRef({}) // Stocker le type de chaque couche (vector/raster)
   const [selectedFeature, setSelectedFeature] = useState(null)
   const selectInteractionRef = useRef(null)
   const blinkAnimationRef = useRef({})
@@ -242,7 +247,18 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
 
     const map = mapInstanceRef.current
 
-    // Supprimer les couches qui ne sont plus sélectionnées
+    // Construire un map des types de couches depuis la prop layers
+    const layerTypeMap = {}
+    if (layers && Array.isArray(layers)) {
+      layers.forEach(layer => {
+        if (layer.name && layer.type) {
+          layerTypeMap[layer.name] = layer.type
+          layerTypesRef.current[layer.name] = layer.type
+        }
+      })
+    }
+
+    // Supprimer les couches qui ne sont plus sélectionnées (vectorielles et raster)
     Object.keys(vectorLayersRef.current).forEach(layerName => {
       if (!selectedLayers.includes(layerName)) {
         const layer = vectorLayersRef.current[layerName]
@@ -250,9 +266,24 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
         delete vectorLayersRef.current[layerName]
       }
     })
+    Object.keys(rasterLayersRef.current).forEach(layerName => {
+      if (!selectedLayers.includes(layerName)) {
+        const layer = rasterLayersRef.current[layerName]
+        map.removeLayer(layer)
+        delete rasterLayersRef.current[layerName]
+      }
+    })
 
     // Recharger les couches si le filtre a changé (même si elles existent déjà)
     const shouldReload = (layerName) => {
+      const layerType = layerTypeMap[layerName] || layerTypesRef.current[layerName] || 'vector'
+      
+      // Pour les rasters, on ne supporte pas les filtres pour l'instant
+      if (layerType === 'raster') {
+        return !rasterLayersRef.current[layerName]
+      }
+      
+      // Pour les couches vectorielles
       // Si la couche n'existe pas, il faut la créer
       if (!vectorLayersRef.current[layerName]) {
         return true
@@ -285,11 +316,18 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
     // Ajouter les nouvelles couches sélectionnées ou recharger si nécessaire
     selectedLayers.forEach(layerName => {
       if (shouldReload(layerName)) {
+        const layerType = layerTypeMap[layerName] || layerTypesRef.current[layerName] || 'vector'
+        
         // Supprimer la couche existante si elle existe pour la recréer
         if (vectorLayersRef.current[layerName]) {
           const existingLayer = vectorLayersRef.current[layerName]
           map.removeLayer(existingLayer)
           delete vectorLayersRef.current[layerName]
+        }
+        if (rasterLayersRef.current[layerName]) {
+          const existingLayer = rasterLayersRef.current[layerName]
+          map.removeLayer(existingLayer)
+          delete rasterLayersRef.current[layerName]
         }
         
         // Arrêter l'animation si elle existe
@@ -298,7 +336,101 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
           delete blinkAnimationRef.current[layerName]
         }
         
-        // Créer la nouvelle couche
+        // Créer la nouvelle couche selon son type
+        if (layerType === 'raster') {
+          // Créer une couche raster
+          const loadRasterLayer = async () => {
+            try {
+              // Récupérer les limites du raster
+              const boundsResponse = await axios.get(`${API_URL}/api/layers/${layerName}/raster/bounds`)
+              const bounds = boundsResponse.data
+              
+              if (!bounds || !bounds.minx || !bounds.miny || !bounds.maxx || !bounds.maxy) {
+                console.error(`Impossible de récupérer les limites pour le raster ${layerName}`)
+                return
+              }
+              
+              // Créer une source d'image statique pour le raster
+              // Charger l'image complète du raster
+              const imageExtent = transformExtent(
+                [bounds.minx, bounds.miny, bounds.maxx, bounds.maxy],
+                'EPSG:4326',
+                'EPSG:3857'
+              )
+              
+              // Créer une fonction pour charger l'image dynamiquement
+              const loadRasterImage = () => {
+                const view = map.getView()
+                const extent = view.getExtent()
+                const size = map.getSize()
+                
+                if (!extent || !size) return
+                
+                // Convertir l'étendue en coordonnées WGS84
+                const wgs84Extent = transformExtent(extent, 'EPSG:3857', 'EPSG:4326')
+                
+                // Construire l'URL avec les paramètres bbox
+                const bbox = `${wgs84Extent[0]},${wgs84Extent[1]},${wgs84Extent[2]},${wgs84Extent[3]}`
+                const width = size[0]
+                const height = size[1]
+                
+                const url = `${API_URL}/api/layers/${layerName}/raster?bbox=${bbox}&width=${width}&height=${height}`
+                
+                // Créer une nouvelle source d'image avec l'URL dynamique
+                const imageSource = new ImageStatic({
+                  url: url,
+                  imageExtent: extent,
+                  projection: getProjection('EPSG:3857')
+                })
+                
+                // Mettre à jour la source de la couche
+                if (rasterLayersRef.current[layerName]) {
+                  rasterLayersRef.current[layerName].setSource(imageSource)
+                }
+              }
+              
+              // Charger l'image initiale
+              loadRasterImage()
+              
+              // Créer la couche raster avec une source initiale
+              const initialImageSource = new ImageStatic({
+                url: `${API_URL}/api/layers/${layerName}/raster`,
+                imageExtent: imageExtent,
+                projection: getProjection('EPSG:3857')
+              })
+              
+              const rasterLayer = new ImageLayer({
+                source: initialImageSource,
+                opacity: 1.0,
+                visible: true,
+                zIndex: 10
+              })
+              
+              rasterLayersRef.current[layerName] = rasterLayer
+              map.addLayer(rasterLayer)
+              
+              // Mettre à jour le raster quand la vue change (avec debounce)
+              let updateTimeout = null
+              const updateRaster = () => {
+                if (updateTimeout) clearTimeout(updateTimeout)
+                updateTimeout = setTimeout(() => {
+                  loadRasterImage()
+                }, 300) // Attendre 300ms après le dernier changement
+              }
+              
+              map.getView().on('change:center', updateRaster)
+              map.getView().on('change:resolution', updateRaster)
+              
+            } catch (error) {
+              console.error(`Erreur lors du chargement du raster ${layerName}:`, error)
+            }
+          }
+          
+          loadRasterLayer()
+          return // Passer à la couche suivante
+        }
+        
+        // Créer la nouvelle couche vectorielle
         // Créer le format GeoJSON
         const geojsonFormat = new GeoJSON({
           dataProjection: 'EPSG:4326',

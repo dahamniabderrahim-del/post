@@ -79,3 +79,5 @@ Le backend autorise maintenant :
 
 Si votre frontend a une URL différente, vous pouvez l'ajouter dans `backend/app.py` dans la liste `allowed_origins`.
 
+
+

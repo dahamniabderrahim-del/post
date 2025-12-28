@@ -110,3 +110,5 @@ Si vous avez encore des erreurs de connexion :
 1. Vérifiez que vos tables existent dans la base de données
 2. Migrez vos données depuis votre base locale si nécessaire
 
+
+
