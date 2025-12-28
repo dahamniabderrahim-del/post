@@ -7,13 +7,6 @@ import os
 from urllib.parse import urlparse
 import base64
 import io
-try:
-    from PIL import Image
-    import numpy as np
-    HAS_PIL = True
-except ImportError:
-    HAS_PIL = False
-    print("⚠️ PIL/Pillow non disponible. Les rasters ne pourront pas être convertis en images.")
 
 app = Flask(__name__)
 
