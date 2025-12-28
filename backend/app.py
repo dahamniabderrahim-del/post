@@ -64,6 +64,8 @@ def get_db_connection():
     """Établit une connexion à la base de données PostgreSQL"""
     try:
         conn = psycopg2.connect(**DB_CONFIG)
+        # S'assurer que autocommit est désactivé pour gérer les transactions manuellement
+        conn.autocommit = False
         return conn
     except Exception as e:
         print(f"Erreur de connexion à la base de données: {e}")
@@ -528,6 +530,11 @@ def get_layer_raster(layer_name):
             except Exception as jpeg_error:
                 error_msg = str(jpeg_error)
                 print(f"⚠️ Raster {layer_name}: JPEG échoué, essai PNG. Erreur: {error_msg}")
+                # Rollback de la transaction si elle a été abandonnée
+                try:
+                    conn.rollback()
+                except:
+                    pass
                 try:
                     # Essayer PNG si JPEG échoue
                     raster_query = f"""
@@ -560,6 +567,11 @@ def get_layer_raster(layer_name):
                 except Exception as png_error:
                     error_msg = str(png_error)
                     print(f"❌ Raster {layer_name}: PNG aussi échoué. Erreur: {error_msg}")
+                    # Rollback avant de retourner l'erreur
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
                     return jsonify({
                         'error': 'Impossible de générer l\'image raster',
                         'details': 'Les pilotes JPEG et PNG ne sont pas disponibles dans GDAL. Vérifiez les pilotes disponibles avec: SELECT * FROM ST_GDALDrivers();',
@@ -601,6 +613,13 @@ def get_layer_raster(layer_name):
                 image_format = 'JPEG'
                 mimetype = 'image/jpeg'
             except Exception as jpeg_error:
+                error_msg = str(jpeg_error)
+                print(f"⚠️ Raster {layer_name}: JPEG échoué, essai PNG. Erreur: {error_msg}")
+                # Rollback de la transaction si elle a été abandonnée
+                try:
+                    conn.rollback()
+                except:
+                    pass
                 try:
                     raster_query = f"""
                     SELECT ST_AsGDALRaster(
@@ -622,11 +641,20 @@ def get_layer_raster(layer_name):
                     cursor.execute(raster_query, (safe_width, safe_height))
                     image_format = 'PNG'
                     mimetype = 'image/png'
+                    print(f"✅ Raster {layer_name}: Utilisation du format PNG")
                 except Exception as png_error:
-                    print(f"❌ Raster {layer_name}: JPEG et PNG ont échoué")
+                    error_msg = str(png_error)
+                    print(f"❌ Raster {layer_name}: PNG aussi échoué. Erreur: {error_msg}")
+                    # Rollback avant de retourner l'erreur
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
                     return jsonify({
                         'error': 'Impossible de générer l\'image raster',
-                        'details': 'Les pilotes JPEG et PNG ne sont pas disponibles. Vérifiez les pilotes avec: SELECT * FROM ST_GDALDrivers();'
+                        'details': 'Les pilotes JPEG et PNG ne sont pas disponibles. Vérifiez les pilotes avec: SELECT * FROM ST_GDALDrivers();',
+                        'jpeg_error': str(jpeg_error),
+                        'png_error': error_msg
                     }), 500
         
         # Vérifier que le format d'image a été défini (devrait toujours être défini à ce stade)
