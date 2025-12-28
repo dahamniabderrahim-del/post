@@ -455,6 +455,10 @@ def get_layer_raster(layer_name):
             
             # Récupérer le raster et le convertir en PNG
             # Note: ST_Intersects avec raster nécessite ST_Envelope ou ST_ConvexHull
+            # Limiter la taille pour éviter les problèmes de décodage (max 2048x2048)
+            safe_width = min(width, 2048)
+            safe_height = min(height, 2048)
+            
             raster_query = f"""
             SELECT ST_AsPNG(
                 ST_Resize(
@@ -468,12 +472,17 @@ def get_layer_raster(layer_name):
             WHERE ST_Intersects(
                 ST_Envelope({raster_column}),
                 ST_MakeEnvelope(%s, %s, %s, %s, 4326)
-            );
+            )
+            LIMIT 1;
             """
-            cursor.execute(raster_query, (minx, miny, maxx, maxy, width, height, minx, miny, maxx, maxy))
+            cursor.execute(raster_query, (minx, miny, maxx, maxy, safe_width, safe_height, minx, miny, maxx, maxy))
         else:
             # Récupérer toute l'étendue du raster
             print(f"🖼️ Raster {layer_name}: pas de bbox, utilisation de toute l'étendue")
+            # Limiter la taille pour éviter les problèmes de décodage (max 2048x2048)
+            safe_width = min(width, 2048)
+            safe_height = min(height, 2048)
+            
             raster_query = f"""
             SELECT ST_AsPNG(
                 ST_Resize(
@@ -481,9 +490,10 @@ def get_layer_raster(layer_name):
                     %s, %s
                 )
             ) as png_data
-            FROM "{layer_name}";
+            FROM "{layer_name}"
+            LIMIT 1;
             """
-            cursor.execute(raster_query, (width, height))
+            cursor.execute(raster_query, (safe_width, safe_height))
         
         result = cursor.fetchone()
         
@@ -497,10 +507,37 @@ def get_layer_raster(layer_name):
             print(f"❌ Raster {layer_name}: Données PNG vides")
             return jsonify({'error': 'Impossible de générer l\'image raster (données vides)'}), 500
         
+        # Convertir les données en bytes si nécessaire
+        # PostgreSQL retourne parfois les données comme memoryview ou bytes
+        if isinstance(png_data, memoryview):
+            png_data = png_data.tobytes()
+        elif isinstance(png_data, str):
+            # Si c'est une chaîne, essayer de la décoder
+            try:
+                png_data = png_data.encode('latin-1')
+            except:
+                png_data = bytes(png_data, 'latin-1')
+        elif not isinstance(png_data, bytes):
+            # Essayer de convertir en bytes
+            try:
+                png_data = bytes(png_data)
+            except:
+                print(f"❌ Raster {layer_name}: Impossible de convertir les données en bytes")
+                return jsonify({'error': 'Format de données invalide'}), 500
+        
+        # Vérifier que les données commencent par le header PNG (89 50 4E 47)
+        if len(png_data) < 8 or png_data[0:8] != b'\x89PNG\r\n\x1a\n':
+            print(f"⚠️ Raster {layer_name}: Les données ne semblent pas être un PNG valide (header: {png_data[0:8] if len(png_data) >= 8 else 'trop court'})")
+            # Essayer quand même de retourner les données
+        
         print(f"✅ Raster {layer_name}: Image PNG générée ({len(png_data)} bytes)")
         
-        # Retourner l'image PNG
-        return Response(png_data, mimetype='image/png')
+        # Retourner l'image PNG avec les bons en-têtes
+        response = Response(png_data, mimetype='image/png')
+        response.headers['Content-Type'] = 'image/png'
+        response.headers['Content-Length'] = str(len(png_data))
+        response.headers['Cache-Control'] = 'no-cache'
+        return response
         
     except Exception as e:
         print(f"❌ Erreur dans get_layer_raster: {e}")

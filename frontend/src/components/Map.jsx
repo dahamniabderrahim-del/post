@@ -385,14 +385,30 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
                 const width = size[0]
                 const height = size[1]
                 
-                const url = `${API_URL}/api/layers/${layerName}/raster?bbox=${bbox}&width=${width}&height=${height}`
+                // Limiter la taille pour éviter les problèmes de décodage (max 2048x2048)
+                const safeWidth = Math.min(width, 2048)
+                const safeHeight = Math.min(height, 2048)
+                
+                const url = `${API_URL}/api/layers/${layerName}/raster?bbox=${bbox}&width=${safeWidth}&height=${safeHeight}`
                 console.log(`[${layerName}] 🔗 URL raster:`, url)
                 
                 // Créer une nouvelle source d'image avec l'URL dynamique
                 const imageSource = new ImageStatic({
                   url: url,
                   imageExtent: extent,
-                  projection: getProjection('EPSG:3857')
+                  projection: getProjection('EPSG:3857'),
+                  imageLoadFunction: (image, src) => {
+                    const img = new Image()
+                    img.crossOrigin = 'anonymous'
+                    img.onload = () => {
+                      image.getImage().src = img.src
+                    }
+                    img.onerror = (error) => {
+                      console.error(`[${layerName}] ❌ Erreur de chargement de l'image:`, error)
+                      console.error(`[${layerName}] URL:`, src)
+                    }
+                    img.src = src
+                  }
                 })
                 
                 // Mettre à jour la source de la couche
@@ -412,11 +428,14 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
               if (currentExtent && size) {
                 const wgs84Extent = transformExtent(currentExtent, 'EPSG:3857', 'EPSG:4326')
                 const bbox = `${wgs84Extent[0]},${wgs84Extent[1]},${wgs84Extent[2]},${wgs84Extent[3]}`
-                initialUrl = `${API_URL}/api/layers/${layerName}/raster?bbox=${bbox}&width=${size[0]}&height=${size[1]}`
+                // Limiter la taille pour éviter les problèmes de décodage
+                const safeWidth = Math.min(size[0], 2048)
+                const safeHeight = Math.min(size[1], 2048)
+                initialUrl = `${API_URL}/api/layers/${layerName}/raster?bbox=${bbox}&width=${safeWidth}&height=${safeHeight}`
               } else {
                 // Fallback: utiliser l'étendue complète du raster
                 const bbox = `${bounds.minx},${bounds.miny},${bounds.maxx},${bounds.maxy}`
-                initialUrl = `${API_URL}/api/layers/${layerName}/raster?bbox=${bbox}&width=512&height=512`
+                initialUrl = `${API_URL}/api/layers/${layerName}/raster?bbox=${bbox}&width=1024&height=1024`
               }
               
               console.log(`[${layerName}] 🖼️ URL initiale:`, initialUrl)
@@ -424,16 +443,20 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
               const initialImageSource = new ImageStatic({
                 url: initialUrl,
                 imageExtent: imageExtent,
-                projection: getProjection('EPSG:3857')
-              })
-              
-              // Gérer les erreurs de chargement d'image
-              initialImageSource.on('imageloaderror', (event) => {
-                console.error(`[${layerName}] ❌ Erreur de chargement de l'image raster:`, event)
-              })
-              
-              initialImageSource.on('imageloadend', () => {
-                console.log(`[${layerName}] ✅ Image raster chargée avec succès`)
+                projection: getProjection('EPSG:3857'),
+                imageLoadFunction: (image, src) => {
+                  const img = new Image()
+                  img.crossOrigin = 'anonymous'
+                  img.onload = () => {
+                    console.log(`[${layerName}] ✅ Image raster chargée avec succès`)
+                    image.getImage().src = img.src
+                  }
+                  img.onerror = (error) => {
+                    console.error(`[${layerName}] ❌ Erreur de chargement de l'image raster:`, error)
+                    console.error(`[${layerName}] URL:`, src)
+                  }
+                  img.src = src
+                }
               })
               
               const rasterLayer = new ImageLayer({
