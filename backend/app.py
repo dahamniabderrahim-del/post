@@ -7,6 +7,13 @@ import os
 from urllib.parse import urlparse
 import base64
 import io
+try:
+    from PIL import Image
+    import numpy as np
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
+    print("⚠️ PIL/Pillow non disponible. Les rasters ne pourront pas être convertis en images.")
 
 app = Flask(__name__)
 
@@ -489,33 +496,79 @@ def get_layer_raster(layer_name):
             else:
                 minx, miny, maxx, maxy = minx_wgs84, miny_wgs84, maxx_wgs84, maxy_wgs84
             
-            # Récupérer le raster et le convertir en JPEG (mieux supporté que PNG)
-            # Utiliser le SRID du raster pour ST_MakeEnvelope
-            # Convertir le raster vers 8BUI (8-bit unsigned integer) pour JPEG
-            # Utiliser une plage large pour couvrir différents types de rasters (MNT, images, etc.)
-            raster_query = f"""
-            SELECT ST_AsJPEG(
-                ST_Reclass(
-                    ST_Resize(
-                        ST_Union(
-                            ST_Clip({raster_column}, ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid}))
+            # Récupérer le raster et le convertir en image
+            # GDAL est disponible, utiliser ST_AsGDALRaster avec des options explicites
+            # Essayer d'abord JPEG, puis PNG si JPEG échoue
+            try:
+                raster_query = f"""
+                SELECT ST_AsGDALRaster(
+                    ST_Reclass(
+                        ST_Resize(
+                            ST_Union(
+                                ST_Clip({raster_column}, ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid}))
+                            ),
+                            %s, %s
                         ),
-                        %s, %s
+                        1,
+                        '-1000000-1000000:0-255',
+                        '8BUI',
+                        0
                     ),
-                    1,
-                    '-1000000-1000000:0-255',
-                    '8BUI',
-                    0
+                    'JPEG',
+                    ARRAY['QUALITY=85']
+                ) as image_data
+                FROM "{layer_name}"
+                WHERE ST_Intersects(
+                    ST_Envelope({raster_column}),
+                    ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid})
                 )
-            ) as jpeg_data
-            FROM "{layer_name}"
-            WHERE ST_Intersects(
-                ST_Envelope({raster_column}),
-                ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid})
-            )
-            LIMIT 1;
-            """
-            cursor.execute(raster_query, (minx, miny, maxx, maxy, safe_width, safe_height, minx, miny, maxx, maxy))
+                LIMIT 1;
+                """
+                cursor.execute(raster_query, (minx, miny, maxx, maxy, safe_width, safe_height, minx, miny, maxx, maxy))
+                image_format = 'JPEG'
+                mimetype = 'image/jpeg'
+                print(f"✅ Raster {layer_name}: Utilisation du format JPEG")
+            except Exception as jpeg_error:
+                error_msg = str(jpeg_error)
+                print(f"⚠️ Raster {layer_name}: JPEG échoué, essai PNG. Erreur: {error_msg}")
+                try:
+                    # Essayer PNG si JPEG échoue
+                    raster_query = f"""
+                    SELECT ST_AsGDALRaster(
+                        ST_Reclass(
+                            ST_Resize(
+                                ST_Union(
+                                    ST_Clip({raster_column}, ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid}))
+                                ),
+                                %s, %s
+                            ),
+                            1,
+                            '-1000000-1000000:0-255',
+                            '8BUI',
+                            0
+                        ),
+                        'PNG'
+                    ) as image_data
+                    FROM "{layer_name}"
+                    WHERE ST_Intersects(
+                        ST_Envelope({raster_column}),
+                        ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid})
+                    )
+                    LIMIT 1;
+                    """
+                    cursor.execute(raster_query, (minx, miny, maxx, maxy, safe_width, safe_height, minx, miny, maxx, maxy))
+                    image_format = 'PNG'
+                    mimetype = 'image/png'
+                    print(f"✅ Raster {layer_name}: Utilisation du format PNG")
+                except Exception as png_error:
+                    error_msg = str(png_error)
+                    print(f"❌ Raster {layer_name}: PNG aussi échoué. Erreur: {error_msg}")
+                    return jsonify({
+                        'error': 'Impossible de générer l\'image raster',
+                        'details': 'Les pilotes JPEG et PNG ne sont pas disponibles dans GDAL. Vérifiez les pilotes disponibles avec: SELECT * FROM ST_GDALDrivers();',
+                        'jpeg_error': str(jpeg_error),
+                        'png_error': error_msg
+                    }), 500
         else:
             # Récupérer toute l'étendue du raster
             print(f"🖼️ Raster {layer_name}: pas de bbox, utilisation de toute l'étendue")
@@ -523,25 +576,57 @@ def get_layer_raster(layer_name):
             safe_width = min(width, 2048)
             safe_height = min(height, 2048)
             
-            # Convertir le raster vers 8BUI pour JPEG (mieux supporté que PNG)
-            # Utiliser une plage large pour couvrir différents types de rasters
-            raster_query = f"""
-            SELECT ST_AsJPEG(
-                ST_Reclass(
-                    ST_Resize(
-                        ST_Union({raster_column}),
-                        %s, %s
+            # Essayer JPEG d'abord, puis PNG
+            try:
+                raster_query = f"""
+                SELECT ST_AsGDALRaster(
+                    ST_Reclass(
+                        ST_Resize(
+                            ST_Union({raster_column}),
+                            %s, %s
+                        ),
+                        1,
+                        '-1000000-1000000:0-255',
+                        '8BUI',
+                        0
                     ),
-                    1,
-                    '-1000000-1000000:0-255',
-                    '8BUI',
-                    0
-                )
-            ) as jpeg_data
-            FROM "{layer_name}"
-            LIMIT 1;
-            """
-            cursor.execute(raster_query, (safe_width, safe_height))
+                    'JPEG',
+                    ARRAY['QUALITY=85']
+                ) as image_data
+                FROM "{layer_name}"
+                LIMIT 1;
+                """
+                cursor.execute(raster_query, (safe_width, safe_height))
+                image_format = 'JPEG'
+                mimetype = 'image/jpeg'
+            except Exception as jpeg_error:
+                try:
+                    raster_query = f"""
+                    SELECT ST_AsGDALRaster(
+                        ST_Reclass(
+                            ST_Resize(
+                                ST_Union({raster_column}),
+                                %s, %s
+                            ),
+                            1,
+                            '-1000000-1000000:0-255',
+                            '8BUI',
+                            0
+                        ),
+                        'PNG'
+                    ) as image_data
+                    FROM "{layer_name}"
+                    LIMIT 1;
+                    """
+                    cursor.execute(raster_query, (safe_width, safe_height))
+                    image_format = 'PNG'
+                    mimetype = 'image/png'
+                except Exception as png_error:
+                    print(f"❌ Raster {layer_name}: JPEG et PNG ont échoué")
+                    return jsonify({
+                        'error': 'Impossible de générer l\'image raster',
+                        'details': 'Les pilotes JPEG et PNG ne sont pas disponibles. Vérifiez les pilotes avec: SELECT * FROM ST_GDALDrivers();'
+                    }), 500
         
         result = cursor.fetchone()
         
@@ -549,41 +634,44 @@ def get_layer_raster(layer_name):
             print(f"❌ Raster {layer_name}: Aucune donnée retournée")
             return jsonify({'error': 'Impossible de générer l\'image raster'}), 500
         
-        jpeg_data = result[0]
+        image_data = result[0]
         
-        if not jpeg_data:
-            print(f"❌ Raster {layer_name}: Données JPEG vides")
+        if not image_data:
+            print(f"❌ Raster {layer_name}: Données image vides")
             return jsonify({'error': 'Impossible de générer l\'image raster (données vides)'}), 500
         
         # Convertir les données en bytes si nécessaire
         # PostgreSQL retourne parfois les données comme memoryview ou bytes
-        if isinstance(jpeg_data, memoryview):
-            jpeg_data = jpeg_data.tobytes()
-        elif isinstance(jpeg_data, str):
+        if isinstance(image_data, memoryview):
+            image_data = image_data.tobytes()
+        elif isinstance(image_data, str):
             # Si c'est une chaîne, essayer de la décoder
             try:
-                jpeg_data = jpeg_data.encode('latin-1')
+                image_data = image_data.encode('latin-1')
             except:
-                jpeg_data = bytes(jpeg_data, 'latin-1')
-        elif not isinstance(jpeg_data, bytes):
+                image_data = bytes(image_data, 'latin-1')
+        elif not isinstance(image_data, bytes):
             # Essayer de convertir en bytes
             try:
-                jpeg_data = bytes(jpeg_data)
+                image_data = bytes(image_data)
             except:
                 print(f"❌ Raster {layer_name}: Impossible de convertir les données en bytes")
                 return jsonify({'error': 'Format de données invalide'}), 500
         
-        # Vérifier que les données commencent par le header JPEG (FF D8 FF)
-        if len(jpeg_data) < 3 or jpeg_data[0:3] != b'\xff\xd8\xff':
-            print(f"⚠️ Raster {layer_name}: Les données ne semblent pas être un JPEG valide (header: {jpeg_data[0:3].hex() if len(jpeg_data) >= 3 else 'trop court'})")
-            # Essayer quand même de retourner les données
+        # Vérifier le header selon le format
+        if image_format == 'JPEG':
+            if len(image_data) < 3 or image_data[0:3] != b'\xff\xd8\xff':
+                print(f"⚠️ Raster {layer_name}: Les données ne semblent pas être un JPEG valide (header: {image_data[0:3].hex() if len(image_data) >= 3 else 'trop court'})")
+        elif image_format == 'PNG':
+            if len(image_data) < 8 or image_data[0:8] != b'\x89PNG\r\n\x1a\n':
+                print(f"⚠️ Raster {layer_name}: Les données ne semblent pas être un PNG valide (header: {image_data[0:8] if len(image_data) >= 8 else 'trop court'})")
         
-        print(f"✅ Raster {layer_name}: Image JPEG générée ({len(jpeg_data)} bytes)")
+        print(f"✅ Raster {layer_name}: Image {image_format} générée ({len(image_data)} bytes)")
         
-        # Retourner l'image JPEG avec les bons en-têtes
-        response = Response(jpeg_data, mimetype='image/jpeg')
-        response.headers['Content-Type'] = 'image/jpeg'
-        response.headers['Content-Length'] = str(len(jpeg_data))
+        # Retourner l'image avec les bons en-têtes
+        response = Response(image_data, mimetype=mimetype)
+        response.headers['Content-Type'] = mimetype
+        response.headers['Content-Length'] = str(len(image_data))
         response.headers['Cache-Control'] = 'no-cache'
         return response
         
