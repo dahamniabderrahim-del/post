@@ -442,28 +442,60 @@ def get_layer_raster(layer_name):
             return jsonify({'error': f'Aucune colonne raster trouvée pour "{layer_name}"'}), 404
         
         raster_column = raster_result[0]
+        print(f"✅ Raster {layer_name}: Colonne raster trouvée: {raster_column}")
+        
+        # Détecter le SRID du raster
+        srid_query = f"""
+        SELECT ST_SRID({raster_column}) as srid
+        FROM "{layer_name}"
+        LIMIT 1;
+        """
+        cursor.execute(srid_query)
+        srid_result = cursor.fetchone()
+        raster_srid = srid_result[0] if srid_result else 4326
+        print(f"🗺️ Raster {layer_name}: SRID détecté: {raster_srid}")
         
         # Si bbox est fourni, utiliser ST_Clip, sinon utiliser toute l'étendue
         if bbox:
-            # bbox format: minx,miny,maxx,maxy
+            # bbox format: minx,miny,maxx,maxy (toujours en WGS84/4326 depuis le frontend)
             bbox_parts = bbox.split(',')
             if len(bbox_parts) != 4:
                 return jsonify({'error': 'Format bbox invalide. Utilisez: minx,miny,maxx,maxy'}), 400
             
-            minx, miny, maxx, maxy = map(float, bbox_parts)
-            print(f"🖼️ Raster {layer_name}: bbox={bbox}, width={width}, height={height}")
+            minx_wgs84, miny_wgs84, maxx_wgs84, maxy_wgs84 = map(float, bbox_parts)
+            print(f"🖼️ Raster {layer_name}: bbox WGS84={bbox}, width={width}, height={height}")
             
-            # Récupérer le raster et le convertir en PNG
-            # Note: ST_Intersects avec raster nécessite ST_Envelope ou ST_ConvexHull
             # Limiter la taille pour éviter les problèmes de décodage (max 2048x2048)
             safe_width = min(width, 2048)
             safe_height = min(height, 2048)
             
+            # Si le SRID du raster est différent de 4326, convertir le bbox
+            if raster_srid != 4326:
+                # Convertir le bbox WGS84 vers le SRID du raster
+                transform_query = f"""
+                SELECT 
+                    ST_XMin(ST_Transform(ST_MakeEnvelope(%s, %s, %s, %s, 4326), {raster_srid})) as minx,
+                    ST_YMin(ST_Transform(ST_MakeEnvelope(%s, %s, %s, %s, 4326), {raster_srid})) as miny,
+                    ST_XMax(ST_Transform(ST_MakeEnvelope(%s, %s, %s, %s, 4326), {raster_srid})) as maxx,
+                    ST_YMax(ST_Transform(ST_MakeEnvelope(%s, %s, %s, %s, 4326), {raster_srid})) as maxy
+                """
+                cursor.execute(transform_query, (minx_wgs84, miny_wgs84, maxx_wgs84, maxy_wgs84, 
+                                                minx_wgs84, miny_wgs84, maxx_wgs84, maxy_wgs84,
+                                                minx_wgs84, miny_wgs84, maxx_wgs84, maxy_wgs84,
+                                                minx_wgs84, miny_wgs84, maxx_wgs84, maxy_wgs84))
+                bbox_transformed = cursor.fetchone()
+                minx, miny, maxx, maxy = bbox_transformed
+                print(f"🔄 Raster {layer_name}: bbox transformé vers SRID {raster_srid}: {minx}, {miny}, {maxx}, {maxy}")
+            else:
+                minx, miny, maxx, maxy = minx_wgs84, miny_wgs84, maxx_wgs84, maxy_wgs84
+            
+            # Récupérer le raster et le convertir en PNG
+            # Utiliser le SRID du raster pour ST_MakeEnvelope
             raster_query = f"""
             SELECT ST_AsPNG(
                 ST_Resize(
                     ST_Union(
-                        ST_Clip({raster_column}, ST_MakeEnvelope(%s, %s, %s, %s, 4326))
+                        ST_Clip({raster_column}, ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid}))
                     ),
                     %s, %s
                 )
@@ -471,7 +503,7 @@ def get_layer_raster(layer_name):
             FROM "{layer_name}"
             WHERE ST_Intersects(
                 ST_Envelope({raster_column}),
-                ST_MakeEnvelope(%s, %s, %s, %s, 4326)
+                ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid})
             )
             LIMIT 1;
             """
@@ -588,7 +620,18 @@ def get_raster_bounds(layer_name):
         raster_column = raster_result[0]
         print(f"✅ Raster bounds {layer_name}: Colonne raster trouvée: {raster_column}")
         
-        # Récupérer les limites du raster
+        # Détecter le SRID du raster
+        srid_query = f"""
+        SELECT ST_SRID({raster_column}) as srid
+        FROM "{layer_name}"
+        LIMIT 1;
+        """
+        cursor.execute(srid_query)
+        srid_result = cursor.fetchone()
+        raster_srid = srid_result[0] if srid_result else 4326
+        print(f"🗺️ Raster bounds {layer_name}: SRID détecté: {raster_srid}")
+        
+        # Récupérer les limites du raster dans son SRID natif
         bounds_query = f"""
         SELECT 
             ST_XMin(ST_Envelope(ST_Union({raster_column}))) as minx,
@@ -603,12 +646,29 @@ def get_raster_bounds(layer_name):
         bounds = cursor.fetchone()
         
         if bounds and all(bounds):
-            print(f"✅ Raster bounds {layer_name}: {bounds[0]}, {bounds[1]}, {bounds[2]}, {bounds[3]}")
+            minx, miny, maxx, maxy = bounds[0], bounds[1], bounds[2], bounds[3]
+            print(f"✅ Raster bounds {layer_name} (SRID {raster_srid}): {minx}, {miny}, {maxx}, {maxy}")
+            
+            # Si le SRID n'est pas 4326, convertir vers WGS84 pour le frontend
+            if raster_srid != 4326:
+                transform_query = f"""
+                SELECT 
+                    ST_XMin(ST_Transform(ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid}), 4326)) as minx,
+                    ST_YMin(ST_Transform(ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid}), 4326)) as miny,
+                    ST_XMax(ST_Transform(ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid}), 4326)) as maxx,
+                    ST_YMax(ST_Transform(ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid}), 4326)) as maxy
+                """
+                cursor.execute(transform_query, (minx, miny, maxx, maxy, minx, miny, maxx, maxy, 
+                                                minx, miny, maxx, maxy, minx, miny, maxx, maxy))
+                bounds_wgs84 = cursor.fetchone()
+                minx, miny, maxx, maxy = bounds_wgs84[0], bounds_wgs84[1], bounds_wgs84[2], bounds_wgs84[3]
+                print(f"🔄 Raster bounds {layer_name}: Converti vers WGS84: {minx}, {miny}, {maxx}, {maxy}")
+            
             return jsonify({
-                'minx': bounds[0],
-                'miny': bounds[1],
-                'maxx': bounds[2],
-                'maxy': bounds[3]
+                'minx': minx,
+                'miny': miny,
+                'maxx': maxx,
+                'maxy': maxy
             })
         else:
             print(f"❌ Raster bounds {layer_name}: Impossible de calculer les limites")
