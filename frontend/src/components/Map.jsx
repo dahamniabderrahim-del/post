@@ -369,10 +369,10 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
               // Créer une fonction pour charger l'image dynamiquement
               const loadRasterImage = () => {
                 const view = map.getView()
-                const extent = view.getExtent()
+                const extent = view.calculateExtent(map.getSize())
                 const size = map.getSize()
                 
-                if (!extent || !size) {
+                if (!extent || !size || extent.length !== 4) {
                   console.warn(`[${layerName}] ⚠️ Extent ou size non disponible`)
                   return
                 }
@@ -405,7 +405,7 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
               // Créer la couche raster avec une source initiale
               // Pour l'image initiale, utiliser l'étendue complète du raster
               const view = map.getView()
-              const currentExtent = view.getExtent()
+              const currentExtent = view.calculateExtent(map.getSize())
               const size = map.getSize()
               
               let initialUrl
