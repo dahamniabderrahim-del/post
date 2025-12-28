@@ -491,13 +491,21 @@ def get_layer_raster(layer_name):
             
             # Récupérer le raster et le convertir en PNG
             # Utiliser le SRID du raster pour ST_MakeEnvelope
+            # Convertir le raster vers 8BUI (8-bit unsigned integer) pour PNG
+            # Utiliser une plage large pour couvrir différents types de rasters (MNT, images, etc.)
             raster_query = f"""
             SELECT ST_AsPNG(
-                ST_Resize(
-                    ST_Union(
-                        ST_Clip({raster_column}, ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid}))
+                ST_Reclass(
+                    ST_Resize(
+                        ST_Union(
+                            ST_Clip({raster_column}, ST_MakeEnvelope(%s, %s, %s, %s, {raster_srid}))
+                        ),
+                        %s, %s
                     ),
-                    %s, %s
+                    1,
+                    '-1000000-1000000:0-255',
+                    '8BUI',
+                    0
                 )
             ) as png_data
             FROM "{layer_name}"
@@ -515,11 +523,19 @@ def get_layer_raster(layer_name):
             safe_width = min(width, 2048)
             safe_height = min(height, 2048)
             
+            # Convertir le raster vers 8BUI pour PNG
+            # Utiliser une plage large pour couvrir différents types de rasters
             raster_query = f"""
             SELECT ST_AsPNG(
-                ST_Resize(
-                    ST_Union({raster_column}),
-                    %s, %s
+                ST_Reclass(
+                    ST_Resize(
+                        ST_Union({raster_column}),
+                        %s, %s
+                    ),
+                    1,
+                    '-1000000-1000000:0-255',
+                    '8BUI',
+                    0
                 )
             ) as png_data
             FROM "{layer_name}"
