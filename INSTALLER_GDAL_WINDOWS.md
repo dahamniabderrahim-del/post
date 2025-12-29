@@ -214,3 +214,4 @@ R : PostGIS doit être recompilé avec le support GDAL. L'installation de GDAL s
 **Q : Quelle est la solution la plus simple ?**  
 R : Utiliser Docker avec une image PostGIS qui inclut GDAL, ou utiliser une base de données cloud avec GDAL pré-installé.
 
+

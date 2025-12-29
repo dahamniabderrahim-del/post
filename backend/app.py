@@ -838,6 +838,13 @@ def health_check():
         return jsonify({'status': 'healthy', 'database': 'connected'})
     else:
         return jsonify({'status': 'unhealthy', 'database': 'disconnected'}), 500
+@app.route("/api/test-gdal")
+def test_gdal():
+    from osgeo import gdal
+    return {
+        "gdal_version": gdal.VersionInfo(),
+        "drivers": [d.ShortName for d in gdal.GetDriverList()]
+    }
 
 @app.route('/api/test/<layer_name>', methods=['GET'])
 def test_layer(layer_name):

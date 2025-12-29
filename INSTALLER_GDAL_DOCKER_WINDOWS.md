@@ -164,3 +164,4 @@ docker exec -i postgis-gdal psql -U postgres -d backend < backup.sql
 ✅ Pas besoin de compiler quoi que ce soit.  
 ✅ GDAL est généralement inclus dans les images PostGIS officielles.
 
+

@@ -227,3 +227,4 @@ AND EXISTS (
 SELECT ST_Metadata(raster_column) FROM votre_table LIMIT 1;
 ```
 
+

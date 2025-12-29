@@ -129,3 +129,4 @@ Les couches raster ne fonctionneront pas tant que GDAL ne sera pas installé et 
 
 **L'application fonctionne correctement pour les couches vectorielles** et gère gracieusement l'absence de GDAL.
 
+

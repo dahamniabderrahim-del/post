@@ -1,0 +1,17 @@
+# Image officielle GDAL avec tous les drivers
+FROM osgeo/gdal:ubuntu-small-latest
+
+# Dossier de travail
+WORKDIR /app
+
+# Copier le code
+COPY . .
+
+# Installer les dépendances Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Exposer le port utilisé par Render
+EXPOSE 10000
+
+# Lancer l’API
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:10000"]

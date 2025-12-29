@@ -54,3 +54,4 @@ Si Render continue d'utiliser Python 3.13 malgré `runtime.txt` :
 2. Vérifiez que `backend/runtime.txt` existe et contient `python-3.11.9`
 3. Forcez Python 3.11 dans les **Settings** du dashboard Render (Option 1 ci-dessus)
 
+

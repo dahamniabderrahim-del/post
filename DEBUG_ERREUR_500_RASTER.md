@@ -105,3 +105,4 @@ Le code a été amélioré pour :
 2. **Testez la requête SQL directement** dans PostgreSQL
 3. **Partagez l'erreur** des logs pour que je puisse vous aider à la résoudre
 
+

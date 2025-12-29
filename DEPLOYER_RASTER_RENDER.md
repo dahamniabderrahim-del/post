@@ -198,3 +198,4 @@ Si vous rencontrez des problèmes :
 3. Vérifiez la console du navigateur (F12)
 4. Testez les endpoints directement dans le navigateur
 
+

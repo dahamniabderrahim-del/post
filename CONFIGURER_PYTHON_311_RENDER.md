@@ -75,3 +75,4 @@ Si Python 3.13 continue d'être utilisé, vous pouvez essayer de mettre à jour 
 - [ ] Service redéployé sur Render
 - [ ] Logs de build montrent Python 3.11.9
 
+

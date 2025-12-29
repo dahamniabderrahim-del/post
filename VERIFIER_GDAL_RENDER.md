@@ -146,3 +146,4 @@ WHERE short_name IN ('JPEG', 'PNG');
 - Contactez le support Render (le plus probable)
 - Ou migrez vers un service qui garantit PostGIS + GDAL (Supabase, AWS RDS)
 
+

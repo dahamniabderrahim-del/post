@@ -33,3 +33,4 @@ echo 3. Verifiez les logs: devrait voir "Python version 3.11.9"
 echo.
 pause
 
+

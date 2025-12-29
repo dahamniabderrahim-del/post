@@ -79,3 +79,4 @@ LIMIT 10;
 --   → GDAL est correctement configuré
 --   → Le problème vient peut-être du code ou d'une autre configuration
 
+
