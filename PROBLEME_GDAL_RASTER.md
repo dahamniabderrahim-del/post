@@ -23,8 +23,8 @@ Les couches raster PostGIS nécessitent les pilotes GDAL (JPEG/PNG) pour convert
 **Si vous avez accès au serveur PostgreSQL :**
 
 1. Vérifiez les pilotes disponibles :
-   ```sql
-   SELECT * FROM ST_GDALDrivers();
+   ```sql SELECT * FROM ST_GDALDrivers();
+  
    ```
 
 2. Installez les pilotes GDAL nécessaires :

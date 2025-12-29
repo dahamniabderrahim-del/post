@@ -656,7 +656,7 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
             const r = parseInt(color.slice(1, 3), 16)
             const g = parseInt(color.slice(3, 5), 16)
             const b = parseInt(color.slice(5, 7), 16)
-            return `rgba(${r}, ${g}, ${b}, ${alpha})`
+          return `rgba(${r}, ${g}, ${b}, ${alpha})`
           }
           // Fallback
           return `rgba(255, 255, 0, ${alpha})`
@@ -688,20 +688,20 @@ const Map = forwardRef(({ selectedLayers, layerColors = {}, filter = null, layer
         }
         
         const styleFunction = (feature) => {
-                    const geometry = feature.getGeometry()
-                    if (!geometry) {
+          const geometry = feature.getGeometry()
+          if (!geometry) {
                       const currentColor = getBlinkingColor()
                       const fillOpacity = isFiltered ? 0.85 : 0.3 // Opacité très élevée pour les entités filtrées (jaune bien visible)
-                      return new Style({
+            return new Style({
                         stroke: new Stroke({ color: currentColor, width: 3 }),
                         fill: new Fill({ color: colorToRgba(currentColor, fillOpacity) }),
-                        image: new Circle({
-                          radius: 8,
+              image: new Circle({
+                radius: 8,
                           fill: new Fill({ color: currentColor }),
-                          stroke: new Stroke({ color: '#ffffff', width: 2 })
-                        })
-                      })
-                    }
+                stroke: new Stroke({ color: '#ffffff', width: 2 })
+              })
+            })
+          }
           
           const geometryType = geometry.getType()
           const currentColor = getBlinkingColor()
