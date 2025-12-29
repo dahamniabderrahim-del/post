@@ -1,14 +1,18 @@
+# Image officielle GDAL avec tous les drivers
 FROM osgeo/gdal:ubuntu-small-latest
 
-ENV LANG=C.UTF-8
-ENV LC_ALL=C.UTF-8
-
+# Définir le dossier de travail
 WORKDIR /app
 
+# Copier le code source
 COPY . .
 
+# Installer pip et dépendances Python
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir -r requirements.txt
 
-EXPOSE 5000
+# Exposer le port (optionnel, juste pour documentation)
+EXPOSE 10000
 
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:5000"]
+# Lancer l'API avec le port fourni par Render
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:$PORT", "--workers", "1"]
