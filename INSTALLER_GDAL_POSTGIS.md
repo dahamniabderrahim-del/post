@@ -112,3 +112,7 @@ SELECT ST_AsJPEG(
 Si cette requête fonctionne, GDAL est correctement configuré.
 
 
+
+
+
+

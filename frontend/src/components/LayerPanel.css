@@ -230,6 +230,38 @@
   font-weight: 600;
 }
 
+.table-button {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  padding: 0.5rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+}
+
+.table-button:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.table-button:active {
+  transform: scale(0.95);
+}
+
+.table-button svg {
+  width: 18px;
+  height: 18px;
+}
+
 .zoom-button {
   background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
   border: none;

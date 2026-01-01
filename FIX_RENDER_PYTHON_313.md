@@ -55,3 +55,7 @@ Si Render continue d'utiliser Python 3.13 malgré `runtime.txt` :
 3. Forcez Python 3.11 dans les **Settings** du dashboard Render (Option 1 ci-dessus)
 
 
+
+
+
+

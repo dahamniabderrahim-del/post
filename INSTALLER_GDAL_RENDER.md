@@ -233,3 +233,7 @@ Si cette requête retourne des lignes, GDAL est disponible ! ✅
 Si vous voulez rester sur Render.com, contactez le support pour voir si GDAL peut être installé, ou utilisez un service externe comme GeoServer pour servir les rasters.
 
 
+
+
+
+

@@ -58,6 +58,7 @@ body {
   flex: 1;
   position: relative;
   background: #f1f5f9;
+  min-height: 0;
 }
 
 .ol-map {

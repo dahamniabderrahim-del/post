@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import Map from './components/Map'
 import LayerPanel from './components/LayerPanel'
+import AttributeTable from './components/AttributeTable'
 import { API_URL } from './config'
 import './App.css'
 
@@ -9,6 +10,7 @@ function App() {
   const [selectedLayers, setSelectedLayers] = useState([])
   const [layerColors, setLayerColors] = useState({})
   const [filter, setFilter] = useState(null)
+  const [attributeTableLayer, setAttributeTableLayer] = useState(null)
   const mapRef = useRef(null)
 
   useEffect(() => {
@@ -108,6 +110,14 @@ function App() {
     }
   }
 
+  const handleShowAttributeTable = (layerName) => {
+    setAttributeTableLayer(layerName)
+  }
+
+  const handleCloseAttributeTable = () => {
+    setAttributeTableLayer(null)
+  }
+
   return (
     <div className="app">
       <header className="app-header">
@@ -123,6 +133,7 @@ function App() {
             onLayerZoom={handleLayerZoom}
             layerColors={layerColors}
             onColorChange={handleColorChange}
+            onShowAttributeTable={handleShowAttributeTable}
             databaseName="pos"
           />
         </aside>
@@ -137,6 +148,11 @@ function App() {
           />
         </main>
       </div>
+      <AttributeTable
+        layerName={attributeTableLayer}
+        isOpen={attributeTableLayer !== null}
+        onClose={handleCloseAttributeTable}
+      />
     </div>
   )
 }
