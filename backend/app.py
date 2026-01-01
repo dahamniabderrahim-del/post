@@ -133,10 +133,10 @@ def get_layers():
         # Trier par nom
         all_layers.sort(key=lambda x: x['name'])
         
-        print(f"📋 {len(all_layers)} couche(s) trouvée(s) ({len(vector_layers)} vectorielle(s), {len(raster_layers)} raster(s))")
+        print(f"[INFO] {len(all_layers)} couche(s) trouvee(s) ({len(vector_layers)} vectorielle(s), {len(raster_layers)} raster(s))")
         return jsonify(all_layers)
     except Exception as e:
-        print(f"❌ Erreur dans get_layers: {e}")
+        print(f"[ERROR] Erreur dans get_layers: {e}")
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
@@ -163,7 +163,7 @@ def get_layer_geojson(layer_name):
         table_exists = cursor.fetchone()[0]
         
         if not table_exists:
-            print(f"❌ Table {layer_name} n'existe pas")
+            print(f"[ERROR] Table {layer_name} n'existe pas")
             return jsonify({'error': f'Table "{layer_name}" n\'existe pas'}), 404
         
         # Trouve la colonne géométrique (sans paramètres pour éviter les erreurs)
@@ -181,13 +181,13 @@ def get_layer_geojson(layer_name):
             geom_result = cursor.fetchone()
             
             if not geom_result or len(geom_result) == 0:
-                print(f"❌ Aucune colonne géométrique trouvée pour {layer_name}")
+                print(f"[ERROR] Aucune colonne geometrique trouvee pour {layer_name}")
                 return jsonify({'error': 'Aucune colonne géométrique trouvée'}), 404
             
             geom_column = geom_result[0]
-            print(f"✓ Colonne géométrique trouvée: {geom_column}")
+            print(f"[OK] Colonne geometrique trouvee: {geom_column}")
         except Exception as e:
-            print(f"❌ Erreur lors de la recherche de colonne géométrique: {e}")
+            print(f"[ERROR] Erreur lors de la recherche de colonne geometrique: {e}")
             return jsonify({'error': f'Erreur lors de la recherche de colonne géométrique: {str(e)}'}), 500
         
         # Trouve le SRID de manière séparée (plus robuste)
@@ -203,10 +203,10 @@ def get_layer_geojson(layer_name):
             geom_srid = srid_result[0] if srid_result and srid_result[0] else 4326
         except Exception as e:
             # Si on ne peut pas déterminer le SRID, on assume 4326
-            print(f"⚠ Impossible de déterminer le SRID, utilisation de 4326 par défaut: {e}")
+            print(f"[WARNING] Impossible de determiner le SRID, utilisation de 4326 par defaut: {e}")
             geom_srid = 4326
         
-        print(f"✓ SRID détecté: {geom_srid}")
+        print(f"[OK] SRID detecte: {geom_srid}")
         
         # Récupère toutes les colonnes non-géométriques
         columns_query = f"""
@@ -221,9 +221,9 @@ def get_layer_geojson(layer_name):
         try:
             cursor.execute(columns_query)
             other_columns = [row[0] for row in cursor.fetchall()]
-            print(f"✓ {len(other_columns)} colonne(s) non-géométrique(s) trouvée(s)")
+            print(f"[OK] {len(other_columns)} colonne(s) non-geometrique(s) trouvee(s)")
         except Exception as e:
-            print(f"⚠ Erreur lors de la récupération des colonnes: {e}")
+            print(f"[WARNING] Erreur lors de la recuperation des colonnes: {e}")
             other_columns = []
         
         # Récupérer les paramètres de filtre
@@ -246,7 +246,7 @@ def get_layer_geojson(layer_name):
                 filter_where = f' AND "{filter_column}" {filter_operator} \'{escaped_value}\''
             else:  # =
                 filter_where = f' AND "{filter_column}"::text = \'{escaped_value}\''
-            print(f"🔍 Filtre appliqué: {filter_column} {filter_operator} {filter_value}")
+            print(f"[SEARCH] Filtre applique: {filter_column} {filter_operator} {filter_value}")
         
         # Construit la requête GeoJSON de manière plus simple et robuste
         # Utilise ST_Transform pour convertir en 4326 si nécessaire
@@ -271,12 +271,12 @@ def get_layer_geojson(layer_name):
         count_query = f'SELECT COUNT(*) FROM "{layer_name}" WHERE {geom_column} IS NOT NULL{filter_where};'
         cursor.execute(count_query)
         row_count = cursor.fetchone()[0]
-        print(f"📊 Table {layer_name}: {row_count} lignes avec géométrie (SRID: {geom_srid})")
+        print(f"[DATA] Table {layer_name}: {row_count} lignes avec geometrie (SRID: {geom_srid})")
         if filter_where:
-            print(f"🔍 Filtre appliqué: {filter_column} {filter_operator} {filter_value}")
+            print(f"[SEARCH] Filtre applique: {filter_column} {filter_operator} {filter_value}")
         
         if row_count == 0:
-            print(f"⚠ Table {layer_name} est vide ou aucun résultat avec le filtre")
+            print(f"[WARNING] Table {layer_name} est vide ou aucun resultat avec le filtre")
             return jsonify({'type': 'FeatureCollection', 'features': []})
         
         # Requête SQL simplifiée - approche directe
@@ -299,7 +299,7 @@ def get_layer_geojson(layer_name):
         LIMIT 10000;
         """
         
-        print(f"🔍 Exécution de la requête pour {layer_name}...")
+        print(f"[SEARCH] Execution de la requete pour {layer_name}...")
         cursor.execute(geojson_query)
         result = cursor.fetchone()
         
@@ -307,24 +307,24 @@ def get_layer_geojson(layer_name):
             geojson_data = result[0]
             if isinstance(geojson_data, dict) and 'features' in geojson_data:
                 feature_count = len(geojson_data.get('features', []))
-                print(f"✅ GeoJSON généré pour {layer_name}: {feature_count} features")
+                print(f"[SUCCESS] GeoJSON genere pour {layer_name}: {feature_count} features")
                 # Vérifier le premier feature pour déboguer
                 if feature_count > 0:
                     first_feature = geojson_data['features'][0]
                     print(f"   Exemple feature: type={first_feature.get('geometry', {}).get('type', 'N/A')}")
                 return jsonify(geojson_data)
             else:
-                print(f"⚠ GeoJSON invalide pour {layer_name} (pas de clé 'features')")
+                print(f"[WARNING] GeoJSON invalide pour {layer_name} (pas de cle 'features')")
                 print(f"   Type de données: {type(geojson_data)}")
                 return jsonify({'type': 'FeatureCollection', 'features': []})
         else:
-            print(f"⚠ Aucun résultat retourné pour {layer_name}")
+            print(f"[WARNING] Aucun resultat retourne pour {layer_name}")
             return jsonify({'type': 'FeatureCollection', 'features': []})
             
     except Exception as e:
         import traceback
         error_msg = str(e)
-        print(f"❌ Erreur dans get_layer_geojson pour {layer_name}: {error_msg}")
+        print(f"[ERROR] Erreur dans get_layer_geojson pour {layer_name}: {error_msg}")
         traceback.print_exc()
         return jsonify({'error': error_msg}), 500
     finally:
@@ -444,7 +444,7 @@ def get_layer_raster(layer_name):
             return jsonify({'error': f'Aucune colonne raster trouvée pour "{layer_name}"'}), 404
         
         raster_column = raster_result[0]
-        print(f"✅ Raster {layer_name}: Colonne raster trouvée: {raster_column}")
+        print(f"[SUCCESS] Raster {layer_name}: Colonne raster trouvee: {raster_column}")
         
         # Détecter le SRID du raster
         srid_query = f"""
@@ -455,7 +455,7 @@ def get_layer_raster(layer_name):
         cursor.execute(srid_query)
         srid_result = cursor.fetchone()
         raster_srid = srid_result[0] if srid_result else 4326
-        print(f"🗺️ Raster {layer_name}: SRID détecté: {raster_srid}")
+        print(f"[MAP] Raster {layer_name}: SRID detecte: {raster_srid}")
         
         # Si bbox est fourni, utiliser ST_Clip, sinon utiliser toute l'étendue
         if bbox:
@@ -465,7 +465,7 @@ def get_layer_raster(layer_name):
                 return jsonify({'error': 'Format bbox invalide. Utilisez: minx,miny,maxx,maxy'}), 400
             
             minx_wgs84, miny_wgs84, maxx_wgs84, maxy_wgs84 = map(float, bbox_parts)
-            print(f"🖼️ Raster {layer_name}: bbox WGS84={bbox}, width={width}, height={height}")
+            print(f"[IMAGE] Raster {layer_name}: bbox WGS84={bbox}, width={width}, height={height}")
             
             # Limiter la taille pour éviter les problèmes de décodage (max 2048x2048)
             safe_width = min(width, 2048)
@@ -487,7 +487,7 @@ def get_layer_raster(layer_name):
                                                 minx_wgs84, miny_wgs84, maxx_wgs84, maxy_wgs84))
                 bbox_transformed = cursor.fetchone()
                 minx, miny, maxx, maxy = bbox_transformed
-                print(f"🔄 Raster {layer_name}: bbox transformé vers SRID {raster_srid}: {minx}, {miny}, {maxx}, {maxy}")
+                print(f"[TRANSFORM] Raster {layer_name}: bbox transforme vers SRID {raster_srid}: {minx}, {miny}, {maxx}, {maxy}")
             else:
                 minx, miny, maxx, maxy = minx_wgs84, miny_wgs84, maxx_wgs84, maxy_wgs84
             
@@ -526,10 +526,10 @@ def get_layer_raster(layer_name):
                 cursor.execute(raster_query, (minx, miny, maxx, maxy, safe_width, safe_height, minx, miny, maxx, maxy))
                 image_format = 'JPEG'
                 mimetype = 'image/jpeg'
-                print(f"✅ Raster {layer_name}: Utilisation du format JPEG")
+                print(f"[SUCCESS] Raster {layer_name}: Utilisation du format JPEG")
             except Exception as jpeg_error:
                 error_msg = str(jpeg_error)
-                print(f"⚠️ Raster {layer_name}: JPEG échoué, essai PNG. Erreur: {error_msg}")
+                print(f"[WARNING] Raster {layer_name}: JPEG echoue, essai PNG. Erreur: {error_msg}")
                 # Rollback de la transaction si elle a été abandonnée
                 try:
                     conn.rollback()
@@ -563,10 +563,10 @@ def get_layer_raster(layer_name):
                     cursor.execute(raster_query, (minx, miny, maxx, maxy, safe_width, safe_height, minx, miny, maxx, maxy))
                     image_format = 'PNG'
                     mimetype = 'image/png'
-                    print(f"✅ Raster {layer_name}: Utilisation du format PNG")
+                    print(f"[SUCCESS] Raster {layer_name}: Utilisation du format PNG")
                 except Exception as png_error:
                     error_msg = str(png_error)
-                    print(f"❌ Raster {layer_name}: PNG aussi échoué. Erreur: {error_msg}")
+                    print(f"[ERROR] Raster {layer_name}: PNG aussi echoue. Erreur: {error_msg}")
                     # Rollback avant de retourner l'erreur
                     try:
                         conn.rollback()
@@ -580,7 +580,7 @@ def get_layer_raster(layer_name):
                     }), 500
         else:
             # Récupérer toute l'étendue du raster
-            print(f"🖼️ Raster {layer_name}: pas de bbox, utilisation de toute l'étendue")
+            print(f"[IMAGE] Raster {layer_name}: pas de bbox, utilisation de toute l'etendue")
             # Limiter la taille pour éviter les problèmes de décodage (max 2048x2048)
             safe_width = min(width, 2048)
             safe_height = min(height, 2048)
@@ -614,7 +614,7 @@ def get_layer_raster(layer_name):
                 mimetype = 'image/jpeg'
             except Exception as jpeg_error:
                 error_msg = str(jpeg_error)
-                print(f"⚠️ Raster {layer_name}: JPEG échoué, essai PNG. Erreur: {error_msg}")
+                print(f"[WARNING] Raster {layer_name}: JPEG echoue, essai PNG. Erreur: {error_msg}")
                 # Rollback de la transaction si elle a été abandonnée
                 try:
                     conn.rollback()
@@ -641,10 +641,10 @@ def get_layer_raster(layer_name):
                     cursor.execute(raster_query, (safe_width, safe_height))
                     image_format = 'PNG'
                     mimetype = 'image/png'
-                    print(f"✅ Raster {layer_name}: Utilisation du format PNG")
+                    print(f"[SUCCESS] Raster {layer_name}: Utilisation du format PNG")
                 except Exception as png_error:
                     error_msg = str(png_error)
-                    print(f"❌ Raster {layer_name}: PNG aussi échoué. Erreur: {error_msg}")
+                    print(f"[ERROR] Raster {layer_name}: PNG aussi echoue. Erreur: {error_msg}")
                     # Rollback avant de retourner l'erreur
                     try:
                         conn.rollback()
@@ -659,7 +659,7 @@ def get_layer_raster(layer_name):
         
         # Vérifier que le format d'image a été défini (devrait toujours être défini à ce stade)
         if image_format is None or mimetype is None:
-            print(f"❌ Raster {layer_name}: Format d'image non défini (erreur de programmation)")
+            print(f"[ERROR] Raster {layer_name}: Format d'image non defini (erreur de programmation)")
             return jsonify({
                 'error': 'Erreur interne: format d\'image non défini',
                 'details': 'Vérifiez les logs du serveur pour plus de détails.'
@@ -668,13 +668,13 @@ def get_layer_raster(layer_name):
         result = cursor.fetchone()
         
         if not result or not result[0]:
-            print(f"❌ Raster {layer_name}: Aucune donnée retournée")
+            print(f"[ERROR] Raster {layer_name}: Aucune donnee retournee")
             return jsonify({'error': 'Impossible de générer l\'image raster (aucune donnée retournée)'}), 500
         
         image_data = result[0]
         
         if not image_data:
-            print(f"❌ Raster {layer_name}: Données image vides")
+            print(f"[ERROR] Raster {layer_name}: Donnees image vides")
             return jsonify({'error': 'Impossible de générer l\'image raster (données vides)'}), 500
         
         # Convertir les données en bytes si nécessaire
@@ -692,18 +692,18 @@ def get_layer_raster(layer_name):
             try:
                 image_data = bytes(image_data)
             except:
-                print(f"❌ Raster {layer_name}: Impossible de convertir les données en bytes")
+                print(f"[ERROR] Raster {layer_name}: Impossible de convertir les donnees en bytes")
                 return jsonify({'error': 'Format de données invalide'}), 500
         
         # Vérifier le header selon le format
         if image_format == 'JPEG':
             if len(image_data) < 3 or image_data[0:3] != b'\xff\xd8\xff':
-                print(f"⚠️ Raster {layer_name}: Les données ne semblent pas être un JPEG valide (header: {image_data[0:3].hex() if len(image_data) >= 3 else 'trop court'})")
+                print(f"[WARNING] Raster {layer_name}: Les donnees ne semblent pas etre un JPEG valide (header: {image_data[0:3].hex() if len(image_data) >= 3 else 'trop court'})")
         elif image_format == 'PNG':
             if len(image_data) < 8 or image_data[0:8] != b'\x89PNG\r\n\x1a\n':
-                print(f"⚠️ Raster {layer_name}: Les données ne semblent pas être un PNG valide (header: {image_data[0:8] if len(image_data) >= 8 else 'trop court'})")
+                print(f"[WARNING] Raster {layer_name}: Les donnees ne semblent pas etre un PNG valide (header: {image_data[0:8] if len(image_data) >= 8 else 'trop court'})")
         
-        print(f"✅ Raster {layer_name}: Image {image_format} générée ({len(image_data)} bytes)")
+        print(f"[SUCCESS] Raster {layer_name}: Image {image_format} generee ({len(image_data)} bytes)")
         
         # Retourner l'image avec les bons en-têtes
         response = Response(image_data, mimetype=mimetype)
@@ -716,8 +716,8 @@ def get_layer_raster(layer_name):
         import traceback
         error_msg = str(e)
         error_trace = traceback.format_exc()
-        print(f"❌ Erreur dans get_layer_raster pour {layer_name}: {error_msg}")
-        print(f"📋 Traceback complet:\n{error_trace}")
+        print(f"[ERROR] Erreur dans get_layer_raster pour {layer_name}: {error_msg}")
+        print(f"[INFO] Traceback complet:\n{error_trace}")
         return jsonify({
             'error': 'Erreur lors de la génération de l\'image raster',
             'details': error_msg,
@@ -764,11 +764,11 @@ def get_raster_bounds(layer_name):
         raster_result = cursor.fetchone()
         
         if not raster_result:
-            print(f"❌ Raster bounds {layer_name}: Aucune colonne raster trouvée")
+            print(f"[ERROR] Raster bounds {layer_name}: Aucune colonne raster trouvee")
             return jsonify({'error': f'Aucune colonne raster trouvée pour "{layer_name}"'}), 404
         
         raster_column = raster_result[0]
-        print(f"✅ Raster bounds {layer_name}: Colonne raster trouvée: {raster_column}")
+        print(f"[SUCCESS] Raster bounds {layer_name}: Colonne raster trouvee: {raster_column}")
         
         # Détecter le SRID du raster
         srid_query = f"""
@@ -779,7 +779,7 @@ def get_raster_bounds(layer_name):
         cursor.execute(srid_query)
         srid_result = cursor.fetchone()
         raster_srid = srid_result[0] if srid_result else 4326
-        print(f"🗺️ Raster bounds {layer_name}: SRID détecté: {raster_srid}")
+        print(f"[MAP] Raster bounds {layer_name}: SRID detecte: {raster_srid}")
         
         # Récupérer les limites du raster dans son SRID natif
         bounds_query = f"""
@@ -791,13 +791,13 @@ def get_raster_bounds(layer_name):
         FROM "{layer_name}";
         """
         
-        print(f"📐 Raster bounds {layer_name}: Exécution de la requête...")
+        print(f"[BOUNDS] Raster bounds {layer_name}: Execution de la requete...")
         cursor.execute(bounds_query)
         bounds = cursor.fetchone()
         
         if bounds and all(bounds):
             minx, miny, maxx, maxy = bounds[0], bounds[1], bounds[2], bounds[3]
-            print(f"✅ Raster bounds {layer_name} (SRID {raster_srid}): {minx}, {miny}, {maxx}, {maxy}")
+            print(f"[SUCCESS] Raster bounds {layer_name} (SRID {raster_srid}): {minx}, {miny}, {maxx}, {maxy}")
             
             # Si le SRID n'est pas 4326, convertir vers WGS84 pour le frontend
             if raster_srid != 4326:
@@ -812,7 +812,7 @@ def get_raster_bounds(layer_name):
                                                 minx, miny, maxx, maxy, minx, miny, maxx, maxy))
                 bounds_wgs84 = cursor.fetchone()
                 minx, miny, maxx, maxy = bounds_wgs84[0], bounds_wgs84[1], bounds_wgs84[2], bounds_wgs84[3]
-                print(f"🔄 Raster bounds {layer_name}: Converti vers WGS84: {minx}, {miny}, {maxx}, {maxy}")
+                print(f"[TRANSFORM] Raster bounds {layer_name}: Converti vers WGS84: {minx}, {miny}, {maxx}, {maxy}")
             
             return jsonify({
                 'minx': minx,
@@ -821,7 +821,7 @@ def get_raster_bounds(layer_name):
                 'maxy': maxy
             })
         else:
-            print(f"❌ Raster bounds {layer_name}: Impossible de calculer les limites")
+            print(f"[ERROR] Raster bounds {layer_name}: Impossible de calculer les limites")
             return jsonify({'error': 'Impossible de calculer les limites'}), 404
             
     except Exception as e:
